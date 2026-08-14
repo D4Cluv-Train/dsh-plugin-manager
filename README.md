@@ -84,9 +84,19 @@ bundle（dsh-base、dsh-web-app）不是 profile 的 dependencies（它们从 ds
 本插件的 client bundle 必须**自己挂载**：`apply` 里先
 `await ctx.remote.$mount(INSTALLED_PLUGINS_REMOTE)`（一个 namespace 为
 `installedPlugins`、method 为 `list` 的 contribution，带 strict result codec，
-与 host 端绑定一致），`remote.installedPlugins` 服务才诞生。因此它不能出现在
-`inject` 里（否则 boot 时会一直等待一个只有插件自身 apply 时才会创建的服务），
-弹窗点击时直接 `ctx.remote.installedPlugins.list()` 经 Gateway 调用 host。
+与 host 端绑定一致），`remote.installedPlugins` 服务才诞生。
+
+**为什么不能在 `inject` 里声明 `remote.installedPlugins`、也不能用
+`ctx.remote.installedPlugins` 关联访问**：内置 remote（如 `remote.commands`）
+由 `api-remotes` 在 boot 早期挂载，消费插件可以 `inject: ['remote.commands']`
+把它绑定到自己 fiber 的 store，从而运行时关联访问可用。但本插件的
+`remote.installedPlugins` 由**插件自己**在 `apply` 里挂载——放进 `inject` 会
+让 boot 一直等待一个只有自身 apply 时才会创建的服务（死等）；而
+`ctx.remote.installedPlugins` 的关联访问只沿当前插件 fiber 的父链查找，无法
+看到注册在 gateway（兄弟 fiber）上的服务，会抛 `cannot get property
+"remote.installedPlugins" without inject`。因此 `apply` 在 `$mount` 之后用
+`ctx.get('remote.installedPlugins')`（读共享 root store，不受 fiber 隔离限制）
+取到服务引用并注入弹窗回调，点击时经它调用 host。
 
 ## 构建
 

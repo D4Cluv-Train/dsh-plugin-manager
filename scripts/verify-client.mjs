@@ -80,16 +80,24 @@ const ctx = {
       return () => {}
     },
   },
+  // The plugin reads the mounted namespace through ctx.get (the associative
+  // `ctx.remote.installedPlugins` cannot resolve a service born on a sibling
+  // fiber — that is exactly the runtime failure this test models).
+  get: (name) => {
+    if (name === 'remote.installedPlugins') {
+      return {
+        list: async () => {
+          remoteCalls.push('installedPlugins.list')
+          return { ok: true, value: { entries: [{ name: 'dsh-hello-plugin' }] } }
+        },
+      }
+    }
+    return undefined
+  },
   remote: {
     $mount: async (contribution) => {
       mounted.push(contribution)
       return async () => {}
-    },
-    installedPlugins: {
-      list: async () => {
-        remoteCalls.push('installedPlugins.list')
-        return { ok: true, value: { entries: [{ name: 'dsh-hello-plugin' }] } }
-      },
     },
   },
 }
@@ -110,11 +118,12 @@ if (registerCall === undefined) throw new Error('no sidebar.footer.action regist
 if (registerCall.options.id !== 'hello-plugin') throw new Error(`unexpected action id: ${registerCall.options.id}`)
 if (typeof registerCall.component !== 'function') throw new Error('action component is not a function')
 if (!calls.some(([kind]) => kind === 'locale.register')) throw new Error('locale dictionary not registered')
-// The injected business face must call the host remote through ctx.remote.
+// The injected business face must call the host remote through the reference
+// the plugin captured with ctx.get after $mount.
 const injected = registerCall.options.inject()
 if (typeof injected.listInstalled !== 'function') throw new Error('listInstalled not injected')
 await injected.listInstalled()
-if (!remoteCalls.includes('installedPlugins.list')) throw new Error('listInstalled did not call ctx.remote.installedPlugins.list')
+if (!remoteCalls.includes('installedPlugins.list')) throw new Error('listInstalled did not call the mounted installedPlugins service')
 
 console.log('verify-client: PASS')
 console.log(`  externals required: ${[...seen].join(', ')}`)

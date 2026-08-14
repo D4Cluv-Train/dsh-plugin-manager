@@ -20,7 +20,12 @@
  * `ctx.remote.$mount(INSTALLED_PLUGINS_REMOTE)` and only then registers the
  * UI. Consequently `remote.installedPlugins` is created by this plugin itself
  * and must NOT appear in `inject` (it would pend forever waiting for a service
- * that is only born during this plugin's own apply).
+ * that is only born during this plugin's own apply). Because that service is
+ * provided on the gateway's fiber — a sibling of this plugin's fiber — the
+ * associative `ctx.remote.installedPlugins` access cannot resolve it (it only
+ * walks this fiber's parent chain and throws "without inject"); `apply`
+ * instead captures the live reference with `ctx.get('remote.installedPlugins')`
+ * (shared root store) and injects it into the modal face.
  *
  * Bundle contract: this file is compiled by `npm run build` into
  * `lib/client.js` in the dsh client-bundle format
@@ -274,10 +279,18 @@ function HelloPluginAction({ wide, t, listInstalled }) {
 export async function apply(ctx) {
   ensureStyles()
   await ctx.remote.$mount(INSTALLED_PLUGINS_REMOTE)
+  // The namespace service is registered by $mount on the gateway's fiber, a
+  // sibling of this plugin's fiber. Cordis's `ctx.remote.installedPlugins`
+  // associative access walks only THIS fiber's parent chain, so it cannot see
+  // a service born on a sibling — it throws "without inject". `ctx.get` reads
+  // the shared root store instead, so grab the live reference here and bind it
+  // into the injected face. (Declaring it in `inject` is impossible: the
+  // service only exists after this plugin's own $mount runs.)
+  const installedPlugins = ctx.get('remote.installedPlugins')
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-hello-plugin: dictionaries')
   const injected = () => ({
     listInstalled: async () => {
-      const result = await ctx.remote.installedPlugins.list()
+      const result = await installedPlugins.list()
       if (!result.ok) {
         throw new Error(`installedPlugins.list failed: ${result.error.code}: ${result.error.message}`)
       }
