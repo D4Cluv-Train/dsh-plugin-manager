@@ -13,6 +13,8 @@
 
 ## 安装
 
+- 暂未发布npm包
+
 ```bash
 dsh plugin --profile web add /absolute/path/to/dsh-plugin-manager
 ```
