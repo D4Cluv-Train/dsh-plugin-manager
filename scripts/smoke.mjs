@@ -21,7 +21,11 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
-const checkout = process.env.DSH_CHECKOUT ?? '/Users/gswl00001/Me/DeepSeekHarness/deepseek-harness'
+// The dsh checkout lives beside this workspace (sibling of the `plugins`
+// directory that contains this project): derive it instead of hardcoding a
+// machine-specific absolute path. Override with DSH_CHECKOUT or argv[2].
+const defaultCheckout = fileURLToPath(new URL('../../../deepseek-harness/', import.meta.url))
+const checkout = process.env.DSH_CHECKOUT ?? defaultCheckout
 const dshBin = process.argv[2] ?? join(checkout, 'apps/cli/lib/bin.js')
 if (!existsSync(dshBin)) {
   console.error(`smoke: dsh bin not found at ${dshBin} (pass the path or set DSH_CHECKOUT)`)

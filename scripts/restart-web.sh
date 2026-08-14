@@ -11,7 +11,12 @@
 # 4. wait for the port to come back and print the URL line.
 set -euo pipefail
 
-CHECKOUT="${DSH_CHECKOUT:-/Users/gswl00001/Me/DeepSeekHarness/deepseek-harness}"
+# Resolve the dsh checkout relative to this script: the workspace layout puts
+# it at <workspace>/deepseek-harness, three levels above the scripts directory
+# (scripts → project root → plugins → workspace). Override with DSH_CHECKOUT.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_CHECKOUT="$(cd "$SCRIPT_DIR/../../../deepseek-harness" 2>/dev/null && pwd || true)"
+CHECKOUT="${DSH_CHECKOUT:-$DEFAULT_CHECKOUT}"
 BIN="$CHECKOUT/apps/cli/lib/bin.js"
 PORT="${DSH_WEB_PORT:-3080}"
 LOG="${DSH_WEB_LOG:-$HOME/.dsh/web-restart.log}"

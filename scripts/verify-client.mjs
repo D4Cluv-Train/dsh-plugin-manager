@@ -17,7 +17,11 @@ import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url))
-const checkout = process.env.DSH_CHECKOUT ?? '/Users/gswl00001/Me/DeepSeekHarness/deepseek-harness'
+// The dsh checkout lives beside this workspace (sibling of the `plugins`
+// directory that contains this project): derive it instead of hardcoding a
+// machine-specific absolute path. Override with DSH_CHECKOUT.
+const defaultCheckout = fileURLToPath(new URL('../../../deepseek-harness/', import.meta.url))
+const checkout = process.env.DSH_CHECKOUT ?? defaultCheckout
 const bundlePath = fileURLToPath(new URL('../lib/client.js', import.meta.url))
 if (!existsSync(bundlePath)) {
   console.error('verify-client: lib/client.js missing — run `npm run build:client` first')
