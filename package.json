@@ -1,12 +1,13 @@
 {
   "name": "dsh-hello-plugin",
   "version": "0.1.0",
-  "description": "MVP dsh bundle plugin: proves it loaded by registering a /hello-plugin web route, logging, writing a marker file, and adding a sidebar '插件' button that opens an empty modal",
+  "description": "MVP dsh bundle plugin: proves it loaded by registering a /hello-plugin web route, logging, writing a marker file, and adding a sidebar '插件' button whose modal lists the user-installed plugins",
   "type": "module",
   "main": "./lib/plugin.mjs",
   "exports": {
     ".": "./lib/plugin.mjs",
     "./client": "./lib/client.js",
+    "./installed-plugins": "./lib/installed-plugins.js",
     "./package.json": "./package.json"
   },
   "files": [
@@ -15,7 +16,8 @@
     "README.md"
   ],
   "scripts": {
-    "build:client": "node scripts/build-client.mjs",
+    "build": "node scripts/build.mjs",
+    "build:client": "node scripts/build.mjs",
     "verify:client": "node scripts/verify-client.mjs"
   },
   "private": true,
@@ -30,11 +32,13 @@
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-layout",
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-sidebar"
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-api-remotes"
       ]
     }
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-typert-protocol": "0.1.0-rc.6",
     "esbuild": "^0.25.12"
   }
 }

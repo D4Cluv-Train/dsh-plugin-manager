@@ -6,8 +6,9 @@
  *  2. executes lib/client.js (the bundle registers via __ModuleLoader__.load),
  *  3. materializes the factory with a `require` that answers the externals
  *     (react from the checkout; stubs for UI primitives),
- *  4. asserts the export shape and that `apply` registers the locale
- *     dictionary and the sidebar footer action without throwing.
+ *  4. asserts the export shape, that `apply` mounts the installedPlugins
+ *     Remote contribution through `ctx.remote.$mount`, and that it registers
+ *     the locale dictionary and the sidebar footer action without throwing.
  *
  * Usage: node scripts/verify-client.mjs [path-to-checkout]
  */
@@ -53,14 +54,17 @@ const exports = captured.factory((spec) => {
 })
 
 // 4. assert export shape
-if (!Array.isArray(exports.inject) || exports.inject.join(',') !== 'slots,locale') {
+if (!Array.isArray(exports.inject) || exports.inject.join(',') !== 'slots,locale,remote') {
   throw new Error(`unexpected inject: ${JSON.stringify(exports.inject)}`)
 }
 if (typeof exports.apply !== 'function') throw new Error('apply is not exported')
 
-// 5. assert apply registers the dictionaries and the footer action
+// 5. assert apply mounts the installedPlugins contribution and registers the
+//    dictionaries and the footer action
 const calls = []
 const registered = []
+const remoteCalls = []
+const mounted = []
 const ctx = {
   effect: (fn, label) => { calls.push(['effect', label]); const disposer = fn(); if (typeof disposer === 'function') disposer() },
   locale: {
@@ -76,17 +80,46 @@ const ctx = {
       return () => {}
     },
   },
+  remote: {
+    $mount: async (contribution) => {
+      mounted.push(contribution)
+      return async () => {}
+    },
+    installedPlugins: {
+      list: async () => {
+        remoteCalls.push('installedPlugins.list')
+        return { ok: true, value: { entries: [{ name: 'dsh-hello-plugin' }] } }
+      },
+    },
+  },
 }
-exports.apply(ctx)
+await exports.apply(ctx)
+
+// The plugin must mount its own installedPlugins contribution: the browser
+// `remote` service never auto-discovers host Typert services, and the built-in
+// assembly only mounts its own hard-coded contributions.
+const mountedDescriptor = mounted.flatMap(c => c.descriptors ?? []).find(d => d.namespace === 'installedPlugins' && d.method === 'list')
+if (mountedDescriptor === undefined) throw new Error('installedPlugins/list contribution was not mounted via ctx.remote.$mount')
+if (mountedDescriptor.invocation?.kind !== 'direct') throw new Error(`unexpected invocation: ${JSON.stringify(mountedDescriptor.invocation)}`)
+if (mountedDescriptor.result?.mode !== 'strict' || typeof mountedDescriptor.result?.schema?.parse !== 'function') {
+  throw new Error('installedPlugins/list result codec is not strict with a parse() schema')
+}
 
 const registerCall = registered.find(r => r.options.name === 'sidebar.footer.action')
 if (registerCall === undefined) throw new Error('no sidebar.footer.action registration')
 if (registerCall.options.id !== 'hello-plugin') throw new Error(`unexpected action id: ${registerCall.options.id}`)
 if (typeof registerCall.component !== 'function') throw new Error('action component is not a function')
 if (!calls.some(([kind]) => kind === 'locale.register')) throw new Error('locale dictionary not registered')
+// The injected business face must call the host remote through ctx.remote.
+const injected = registerCall.options.inject()
+if (typeof injected.listInstalled !== 'function') throw new Error('listInstalled not injected')
+await injected.listInstalled()
+if (!remoteCalls.includes('installedPlugins.list')) throw new Error('listInstalled did not call ctx.remote.installedPlugins.list')
 
 console.log('verify-client: PASS')
 console.log(`  externals required: ${[...seen].join(', ')}`)
 console.log(`  inject: ${JSON.stringify(exports.inject)}`)
+console.log(`  mount: ${mountedDescriptor.namespace}/${mountedDescriptor.method} (${mountedDescriptor.result.mode})`)
 console.log(`  registration: ${registerCall.options.name} id=${registerCall.options.id} order=${registerCall.options.order}`)
+console.log(`  remote: ${remoteCalls.join(', ')}`)
 process.exit(0)

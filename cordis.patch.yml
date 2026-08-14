@@ -1,9 +1,16 @@
-# dsh-hello-plugin bundle patch: one entry inserted into the profile tree.
+# dsh-hello-plugin bundle patch: entries inserted into the profile tree.
 # `dsh.bundle.patch` in package.json points here. The composed profile applies
 # this insert over the empty profile root (after @deepseek-ai/dsh-base, before
-# the profile's own cordis.patch.yml). The plugin module declares its own
-# `inject: ['webServer']`, so the Loader mounts this row only after the web
-# surface's WebServer service is available.
+# the profile's own cordis.patch.yml).
+#
+# hello-plugin          — the web-surface plugin: registers the /hello-plugin
+#                         route (inject: ['webServer']), so it mounts only
+#                         after the WebServer service is available.
+# hello-plugin-installed — the installed-plugins Typert remote service, which
+#                         the browser modal queries to list user-installed
+#                         bundles.
 - insert:
     - id: hello-plugin
       name: dsh-hello-plugin
+    - id: hello-plugin-installed
+      name: dsh-hello-plugin/installed-plugins

@@ -17,22 +17,26 @@
 **Client 端（浏览器 UI）**
 5. 在侧边栏**设置按钮上方**添加一个 **"插件"** 按钮（`sidebar.footer.action`
    插槽，图标 `IconCordisPluginOutline14`，宽栏显示图标+文字、收窄为圆形图标）；
-6. 点击按钮弹出**空弹窗**（`Modal` 原语，Escape/遮罩点击关闭）；
+6. 点击按钮弹出**弹窗**，展示**自行安装的插件列表**（仅 `dsh plugin add`
+   安装的 bundle，不含 dsh-base / dsh-web-app 等官方自带的）；
 7. 附带一个简短的本地化字典（zh/en）和自动注入的样式。
 
-零运行时依赖：host 只用 Node 内置模块和 Cordis 传入的 `ctx`；client bundle
-只 import 平台模块（react、ui-primitives 等），由浏览器模块表解析。
+零运行时依赖：host 只用 Node 内置模块 + `@deepseek-ai/dsh-typert-protocol`
+（由安装闭包解析）；client bundle 只 import 平台模块（react、ui-primitives
+等），由浏览器模块表解析。
 
 ## 目录结构
 
 ```
 dsh-plugin-manager/
 ├── package.json        # dsh.bundle.patch（host bundle）+ dsh.client（web 客户端）
-├── cordis.patch.yml    # bundle 补丁层：往 profile 树插入 hello-plugin 条目
-├── lib/plugin.mjs      # host 插件本体（name / inject / apply / 路由）
+├── cordis.patch.yml    # bundle 补丁层：插入 hello-plugin 与 hello-plugin-installed 条目
+├── lib/plugin.mjs      # host 插件本体（/hello-plugin 路由 + 标记文件）
+├── lib/installed-plugins.js  # 构建产物：installedPlugins Typert remote 服务
 ├── lib/client.js       # 构建产物：浏览器 client bundle（loader 格式）
-├── src/client/index.jsx # client 插件源码（侧边栏按钮 + 空弹窗）
-├── scripts/build-client.mjs   # esbuild 构建 lib/client.js
+├── src/host/installed-plugins.js  # host remote 源码（@Remote 装饰器）
+├── src/client/index.jsx # client 插件源码（侧边栏按钮 + 插件列表弹窗）
+├── scripts/build.mjs   # esbuild 构建 client + host 产物
 ├── scripts/verify-client.mjs  # loader 契约模拟验证（无浏览器）
 ├── scripts/smoke.mjs   # host 隔离冒烟测试
 └── scripts/restart-web.sh    # GUI 重启脚本
@@ -50,8 +54,10 @@ dsh-plugin-manager/
 
 ```yaml
 - insert:
-    - id: hello-plugin
+    - id: hello-plugin            # /hello-plugin 路由（inject: webServer）
       name: dsh-hello-plugin
+    - id: hello-plugin-installed  # installedPlugins Typert remote 服务
+      name: dsh-hello-plugin/installed-plugins
 ```
 
 `name` 是模块标识符，从 profile 目录经 `node_modules` 解析（`dsh plugin add`
@@ -65,13 +71,31 @@ dsh-plugin-manager/
 `/plugins/<包名>/client.js`。`dsh.client.inject` 是浏览器侧的依赖边（先加载
 runtime/layout/locale/sidebar 等 client 插件）。
 
-## 构建 client bundle
+**弹窗列表的数据从哪来**：`hello-plugin-installed` 条目提供 Typert remote
+服务 `installedPlugins/list`（`TypertRemoteService` + `@Remote` 装饰器，源码在
+`src/host/installed-plugins.js`，esbuild 编译装饰器语法）。它读取 profile 的
+`package.json`，返回 `dsh.profile.bundles` 与 `dependencies` 的交集——官方模板
+bundle（dsh-base、dsh-web-app）不是 profile 的 dependencies（它们从 dsh 安装
+解析），所以天然被排除。
 
-改完 `src/client/index.jsx` 后重新构建（esbuild 为 devDependency）：
+**浏览器端如何连上这个 host 服务**：浏览器的 `ctx.remote` 不会自动发现 host
+端注册的 Typert 服务——内置装配 `@deepseek-ai/dsh-api-remotes` 只挂载它自己
+硬编码的贡献（commands/goals/dynamic/pluginInventory/messageFeedback）。所以
+本插件的 client bundle 必须**自己挂载**：`apply` 里先
+`await ctx.remote.$mount(INSTALLED_PLUGINS_REMOTE)`（一个 namespace 为
+`installedPlugins`、method 为 `list` 的 contribution，带 strict result codec，
+与 host 端绑定一致），`remote.installedPlugins` 服务才诞生。因此它不能出现在
+`inject` 里（否则 boot 时会一直等待一个只有插件自身 apply 时才会创建的服务），
+弹窗点击时直接 `ctx.remote.installedPlugins.list()` 经 Gateway 调用 host。
+
+## 构建
+
+改完 `src/client/index.jsx` 或 `src/host/installed-plugins.js` 后重新构建
+（esbuild 为 devDependency）：
 
 ```bash
-npm run build:client    # 产出 lib/client.js（loader 格式）
-node scripts/verify-client.mjs   # loader 契约模拟验证
+npm run build            # 产出 lib/client.js + lib/installed-plugins.js
+node scripts/verify-client.mjs   # loader 契约模拟验证（含 remote 调用断言）
 ```
 
 ## 安装到 web profile
@@ -113,7 +137,8 @@ node scripts/smoke.mjs
 2. 浏览器访问 `http://127.0.0.1:3080/hello-plugin`，看到 JSON 即 host 加载成功；
 3. 或在 GUI 的 Settings → Plugins 里看到 `hello-plugin`（模块
    `dsh-hello-plugin`，状态 active）；
-4. 侧边栏设置按钮上方出现 **"插件"** 按钮 → 点击弹出空弹窗（client UI 加载成功）。
+4. 侧边栏设置按钮上方出现 **"插件"** 按钮 → 点击弹出弹窗，列出自行安装的
+   插件（当前为 `dsh-hello-plugin`，不含官方自带 bundle）。
 
 ## 移除
 
@@ -122,3 +147,4 @@ dsh plugin --profile web remove dsh-hello-plugin
 ```
 
 卸载后包会从依赖与 `dsh.profile.bundles` 中移除，重启 dsh web 即不再挂载。
+（注意：卸载会把 `dsh-hello-plugin` 从 bundles 移除，弹窗列表随之清空。）
