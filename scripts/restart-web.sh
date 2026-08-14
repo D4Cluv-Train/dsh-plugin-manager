@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Restart the dsh web GUI (http://127.0.0.1:3080) so the newly added
-# dsh-hello-plugin bundle mounts. Run from anywhere; it locates the checkout.
+# dsh-plugin-manager bundle mounts. Run from anywhere; it locates the checkout.
 #
 # Usage: bash scripts/restart-web.sh
 #

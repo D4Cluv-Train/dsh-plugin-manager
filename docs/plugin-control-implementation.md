@@ -30,7 +30,7 @@
    - 关键推论：`applyEntryPatches` 会把所有层**拍平成一张 patch 列表**再作用到空
      根上（`DH/packages/boot/app-boot/src/profile.ts:413-420`），且对 `insert` 出的
      行**即时建索引**（`vendor/include/src/index.ts:101`）。因此 profile 层里的
-     `{ id: hello-plugin, disabled: true }` 能命中 bundle 层 `insert` 出的同名 id。
+     `{ id: plugin-manager, disabled: true }` 能命中 bundle 层 `insert` 出的同名 id。
 
 4. **客户端清单会随 `disabled` 实时重算，但浏览器不会自动卸载**：
    - `client-modules` 增量扫描以 `entry.fiber !== undefined && !entry.disabled`
@@ -133,7 +133,7 @@ function entriesFor(ctx, pkg) {
 
 **重点注意事项**
 - **整包同开同关**：一个 bundle 可能贡献多个 entry（本例 2 个：
-  `hello-plugin`、`hello-plugin-installed`），启用/关闭必须一次性覆盖该包全部 id。
+  `plugin-manager`、`plugin-manager-installed`），启用/关闭必须一次性覆盖该包全部 id。
 - `apply` 是**无鉴权写端点**（与 `goals.*`/`messageFeedback.*` 同级，走 Typert
   gateway）。MVP 可接受，但这是暴露给浏览器的 host 写权限，注意后续收敛。
 - 方法命名避开 Typert 保留字；`Remote` 装饰器支持 `@Remote('alias')`
@@ -214,16 +214,16 @@ const applyResultSchema = {
 }
 
 const APPLY_DESCRIPTOR = {
-  id: 'dsh-hello-plugin#installedPlugins/apply',
+  id: 'dsh-plugin-manager#installedPlugins/apply',
   service: 'installedPlugins',
   namespace: 'installedPlugins',
   method: 'apply',
   invocation: { kind: 'direct' },
   parameters: [{
     name: 'changes', wire: 'changes', source: 'json',
-    codec: { mode: 'strict', typeSymbol: 'dsh-hello-plugin#ApplyChanges', schema: applyChangesSchema },
+    codec: { mode: 'strict', typeSymbol: 'dsh-plugin-manager#ApplyChanges', schema: applyChangesSchema },
   }],
-  result: { mode: 'strict', typeSymbol: 'dsh-hello-plugin#ApplyResult', schema: applyResultSchema },
+  result: { mode: 'strict', typeSymbol: 'dsh-plugin-manager#ApplyResult', schema: applyResultSchema },
 }
 ```
 
@@ -241,7 +241,7 @@ const APPLY_DESCRIPTOR = {
 ### 3.5 client：UI 扩展（switch + 统一提交 + 第二弹窗）
 
 **技术细节**
-- `HelloPluginAction`（`src/client/index.jsx:215-268`）内部新增"待提交变更"状态：
+- `PluginManagerAction`（`src/client/index.jsx:215-268`）内部新增"待提交变更"状态：
   `pending: Map<name, boolean>`（初值来自 `list` 结果）。
 - 列表项渲染 switch + 状态徽标（`active`/`failed`/`disabled`），切换只改 `pending`，
   不立即调 host。
@@ -299,14 +299,14 @@ function hasClientHalf(profileDir, pkg) {
 
 **技术细节**
 - `dsh-plugin-manager` 自身会出现在 `installedPlugins/list` 里（它是自装 bundle），
-  且它的 `hello-plugin-installed` entry **正是提供管理 UI 的服务**。允许关闭自己会
+  且它的 `plugin-manager-installed` entry **正是提供管理 UI 的服务**。允许关闭自己会
   让服务/UI 当场消失。
 - 处理：host 的 `list` 返回项里，对自身包名打 `self: true` 标记；client 对其禁用
   switch（置灰 + 提示"管理插件自身不可禁用"）。更严格的做法是 `apply` 里对
-  `name === 'dsh-hello-plugin'` 直接拒绝（`{ ok: false }`）。
+  `name === 'dsh-plugin-manager'` 直接拒绝（`{ ok: false }`）。
 
 **重点注意事项**
-- 用**包名**识别自身（`dsh-hello-plugin`），别用 entry id 硬编码，避免重命名漏判。
+- 用**包名**识别自身（`dsh-plugin-manager`），别用 entry id 硬编码，避免重命名漏判。
 - 若未来把"管理器 UI"与"被管理服务"拆成两个包，此豁免可放宽为"仅保护提供
   `installedPlugins` 服务的那个 entry"。
 
@@ -324,7 +324,7 @@ function hasClientHalf(profileDir, pkg) {
     `result.mode === 'strict'`；
   - 注入的 `listInstalled` 返回结构含 `enabled`/`fiberPhase`；
   - 新增注入的 `applyChanges` 会调用 `installedPlugins.apply`。
-- `smoke.mjs` 可加一条：写入一个假的禁用覆盖后，断言 `/hello-plugin` 路由的
+- `smoke.mjs` 可加一条：写入一个假的禁用覆盖后，断言 `/plugin-manager` 路由的
   `register` 记录被移除（stub `webServer` 已有 routes 记录能力）。
 
 **重点注意事项**

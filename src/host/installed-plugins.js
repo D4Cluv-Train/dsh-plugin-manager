@@ -1,5 +1,5 @@
 /**
- * dsh-hello-plugin — host-side "installed plugins" remote service.
+ * dsh-plugin-manager — host-side "installed plugins" remote service.
  *
  * Publishes the Typert Remote `installedPlugins` namespace with two methods:
  *   - `list`: the user-installed bundles (profile bundle layers that are also
@@ -32,7 +32,7 @@ import { applyEnabledChanges, readPatchRows } from './plugin-patches.js'
 export const name = 'installed-plugins'
 
 /** This bundle's package name — the manager must never disable itself. */
-const SELF_PACKAGE = 'dsh-hello-plugin'
+const SELF_PACKAGE = 'dsh-plugin-manager'
 
 /** Cordis FiberState → phase string mirror (see plugin-inventory). */
 const FIBER_PHASE = {

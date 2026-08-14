@@ -1,4 +1,4 @@
-# dsh-hello-plugin
+# dsh-plugin-manager
 
 一个最小可用的 **dsh bundle 插件**（MVP），用来验证"一个插件包能被
 `dsh plugin --profile web add` 安装进 dsh 并成功加载"，并演示如何同时提供
@@ -7,9 +7,9 @@
 插件做的事：
 
 **Host 端（服务器侧）**
-1. 注册路由 **`GET /hello-plugin`** —— 浏览器访问
-   `http://127.0.0.1:3080/hello-plugin` 返回一段 JSON（最直观的加载证明）；
-2. 向 dsh home（`$DSH_HOME` 或 `~/.dsh`）写入标记文件 `dsh-hello-plugin.loaded`；
+1. 注册路由 **`GET /plugin-manager`** —— 浏览器访问
+   `http://127.0.0.1:3080/plugin-manager` 返回一段 JSON（最直观的加载证明）；
+2. 向 dsh home（`$DSH_HOME` 或 `~/.dsh`）写入标记文件 `dsh-plugin-manager.loaded`；
 3. 打一条 apply 日志；
 4. 自动出现在 web GUI 的 **Settings → Plugins** 列表里
    （plugin-inventory 投影 Loader 树，状态 `active`）。
@@ -30,8 +30,8 @@
 ```
 dsh-plugin-manager/
 ├── package.json        # dsh.bundle.patch（host bundle）+ dsh.client（web 客户端）
-├── cordis.patch.yml    # bundle 补丁层：插入 hello-plugin 与 hello-plugin-installed 条目
-├── lib/plugin.mjs      # host 插件本体（/hello-plugin 路由 + 标记文件）
+├── cordis.patch.yml    # bundle 补丁层：插入 plugin-manager 与 plugin-manager-installed 条目
+├── lib/plugin.mjs      # host 插件本体（/plugin-manager 路由 + 标记文件）
 ├── lib/installed-plugins.js  # 构建产物：installedPlugins Typert remote 服务
 ├── lib/client.js       # 构建产物：浏览器 client bundle（loader 格式）
 ├── src/host/installed-plugins.js  # host remote 源码（@Remote 装饰器）
@@ -54,10 +54,10 @@ dsh-plugin-manager/
 
 ```yaml
 - insert:
-    - id: hello-plugin            # /hello-plugin 路由（inject: webServer）
-      name: dsh-hello-plugin
-    - id: hello-plugin-installed  # installedPlugins Typert remote 服务
-      name: dsh-hello-plugin/installed-plugins
+    - id: plugin-manager            # /plugin-manager 路由（inject: webServer）
+      name: dsh-plugin-manager
+    - id: plugin-manager-installed  # installedPlugins Typert remote 服务
+      name: dsh-plugin-manager/installed-plugins
 ```
 
 `name` 是模块标识符，从 profile 目录经 `node_modules` 解析（`dsh plugin add`
@@ -71,7 +71,7 @@ dsh-plugin-manager/
 `/plugins/<包名>/client.js`。`dsh.client.inject` 是浏览器侧的依赖边（先加载
 runtime/layout/locale/sidebar 等 client 插件）。
 
-**弹窗列表的数据从哪来**：`hello-plugin-installed` 条目提供 Typert remote
+**弹窗列表的数据从哪来**：`plugin-manager-installed` 条目提供 Typert remote
 服务 `installedPlugins/list`（`TypertRemoteService` + `@Remote` 装饰器，源码在
 `src/host/installed-plugins.js`，esbuild 编译装饰器语法）。它读取 profile 的
 `package.json`，返回 `dsh.profile.bundles` 与 `dependencies` 的交集——官方模板
@@ -125,7 +125,7 @@ dsh plugin --profile web add /absolute/path/to/dsh-plugin-manager
 
 ## 验证加载
 
-**静态验证（无需重启）** —— 打印组合后的 profile 树，应能看到 `hello-plugin` 条目：
+**静态验证（无需重启）** —— 打印组合后的 profile 树，应能看到 `plugin-manager` 条目：
 
 ```bash
 dsh --profile web --dump-config
@@ -138,23 +138,23 @@ node scripts/smoke.mjs
 ```
 
 它会在临时 DSH_HOME 里建一个最小 profile（装上本包 + 一个 stub webServer），
-启动 `apps/cli/lib/bin.js --profile smoke`，等待 `dsh-hello-plugin.loaded`
-标记文件出现并确认 `/hello-plugin` 路由被注册，然后 PASS。
+启动 `apps/cli/lib/bin.js --profile smoke`，等待 `dsh-plugin-manager.loaded`
+标记文件出现并确认 `/plugin-manager` 路由被注册，然后 PASS。
 
 **GUI 实测（需要重启 dsh web 后）**：
 
 1. 重启 dsh web；
-2. 浏览器访问 `http://127.0.0.1:3080/hello-plugin`，看到 JSON 即 host 加载成功；
-3. 或在 GUI 的 Settings → Plugins 里看到 `hello-plugin`（模块
-   `dsh-hello-plugin`，状态 active）；
+2. 浏览器访问 `http://127.0.0.1:3080/plugin-manager`，看到 JSON 即 host 加载成功；
+3. 或在 GUI 的 Settings → Plugins 里看到 `plugin-manager`（模块
+   `dsh-plugin-manager`，状态 active）；
 4. 侧边栏设置按钮上方出现 **"插件"** 按钮 → 点击弹出弹窗，列出自行安装的
-   插件（当前为 `dsh-hello-plugin`，不含官方自带 bundle）。
+   插件（当前为 `dsh-plugin-manager`，不含官方自带 bundle）。
 
 ## 移除
 
 ```bash
-dsh plugin --profile web remove dsh-hello-plugin
+dsh plugin --profile web remove dsh-plugin-manager
 ```
 
 卸载后包会从依赖与 `dsh.profile.bundles` 中移除，重启 dsh web 即不再挂载。
-（注意：卸载会把 `dsh-hello-plugin` 从 bundles 移除，弹窗列表随之清空。）
+（注意：卸载会把 `dsh-plugin-manager` 从 bundles 移除，弹窗列表随之清空。）

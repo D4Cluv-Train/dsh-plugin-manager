@@ -1,11 +1,11 @@
 /**
- * Isolated boot smoke test for dsh-hello-plugin.
+ * Isolated boot smoke test for dsh-plugin-manager.
  *
  * Boots the dsh built bin (`apps/cli/lib/bin.js`) against a scratch DSH_HOME
  * whose `smoke` profile installs THIS bundle (same link layout pnpm uses) plus
  * a stub `webServer` provider. Success = the plugin's load marker appears
  * under the scratch home, i.e. the bundle resolved, the Loader mounted the
- * `hello-plugin` entry, `inject: ['webServer']` was satisfied, and `apply`
+ * `plugin-manager` entry, `inject: ['webServer']` was satisfied, and `apply`
  * ran (route registration included). The real web profile needs no restart
  * for this check — it never touches the real DSH_HOME or any port.
  *
@@ -32,13 +32,13 @@ if (!existsSync(dshBin)) {
   process.exit(1)
 }
 
-const home = mkdtempSync(join(tmpdir(), 'dsh-hello-smoke-'))
+const home = mkdtempSync(join(tmpdir(), 'dsh-pm-smoke-'))
 const profileDir = join(home, 'profiles', 'smoke')
 const nodeModules = join(profileDir, 'node_modules')
 mkdirSync(nodeModules, { recursive: true })
 
 // "Installed" bundle: the same symlink layout pnpm's link: dependency uses.
-const link = join(nodeModules, 'dsh-hello-plugin')
+const link = join(nodeModules, 'dsh-plugin-manager')
 rmSync(link, { recursive: true, force: true })
 symlinkSync(projectRoot, link, 'junction')
 
@@ -46,7 +46,7 @@ writeFileSync(join(profileDir, 'package.json'), JSON.stringify({
   name: 'dsh-profile-smoke',
   private: true,
   dependencies: {},
-  dsh: { profile: { bundles: ['dsh-hello-plugin'] } },
+  dsh: { profile: { bundles: ['dsh-plugin-manager'] } },
 }, undefined, 2) + '\n')
 
 // Minimal webServer provider so the plugin's inject is satisfiable without
@@ -76,7 +76,7 @@ writeFileSync(join(profileDir, 'cordis.patch.yml'), [
   '',
 ].join('\n'))
 
-const marker = join(home, 'dsh-hello-plugin.loaded')
+const marker = join(home, 'dsh-plugin-manager.loaded')
 const routesFile = join(home, 'routes.json')
 const bootLog = join(home, 'boot.log')
 
@@ -110,11 +110,11 @@ if (child.exitCode === null && child.signalCode === null) {
 let status = 'FAIL'
 if (ok) {
   const routeRecorded = existsSync(routesFile)
-    && readFileSync(routesFile, 'utf8').includes('"/hello-plugin"')
+    && readFileSync(routesFile, 'utf8').includes('"/plugin-manager"')
   if (routeRecorded) {
     status = 'PASS'
   } else {
-    console.error('smoke: marker present but no /hello-plugin route registration recorded')
+    console.error('smoke: marker present but no /plugin-manager route registration recorded')
   }
 }
 

@@ -1,12 +1,12 @@
 /**
- * dsh-hello-plugin — browser client half.
+ * dsh-plugin-manager — browser client half.
  *
  * Registers a "插件" (Plugins) action into the sidebar's `sidebar.footer.action`
  * slot — the optional actions row rendered beside the Settings trigger at the
  * sidebar foot (declared by @deepseek-ai/dsh-client-ui-sidebar). Clicking the
  * button opens a modal that lists the plugins the user installed themselves
  * (via `dsh plugin --profile web add <pkg>`), fetched from the host-side
- * `installedPlugins` Typert remote (dsh-hello-plugin/installed-plugins).
+ * `installedPlugins` Typert remote (dsh-plugin-manager/installed-plugins).
  * Shipped template bundles (dsh-base, dsh-web-app) are excluded by the host:
  * only `dsh.profile.bundles` entries that are also profile dependencies.
  *
@@ -46,7 +46,7 @@ import {
 export const inject = ['slots', 'locale', 'remote']
 
 /** Locale namespace owned by this plugin (the register() `locale` seat). */
-const NS = 'helloPlugin'
+const NS = 'pluginManager'
 
 /**
  * Strict result codec for `installedPlugins/list`. The client-side Gateway
@@ -106,9 +106,9 @@ const applyResultSchema = {
  * what `apply` mounts through `ctx.remote.$mount()`.
  */
 const INSTALLED_PLUGINS_REMOTE = {
-  package: 'dsh-hello-plugin',
+  package: 'dsh-plugin-manager',
   descriptors: [{
-    id: 'dsh-hello-plugin#installedPlugins/list',
+    id: 'dsh-plugin-manager#installedPlugins/list',
     service: 'installedPlugins',
     namespace: 'installedPlugins',
     method: 'list',
@@ -116,11 +116,11 @@ const INSTALLED_PLUGINS_REMOTE = {
     parameters: [],
     result: {
       mode: 'strict',
-      typeSymbol: 'dsh-hello-plugin#InstalledPluginsListResult',
+      typeSymbol: 'dsh-plugin-manager#InstalledPluginsListResult',
       schema: listResultSchema,
     },
   }, {
-    id: 'dsh-hello-plugin#installedPlugins/apply',
+    id: 'dsh-plugin-manager#installedPlugins/apply',
     service: 'installedPlugins',
     namespace: 'installedPlugins',
     method: 'apply',
@@ -131,13 +131,13 @@ const INSTALLED_PLUGINS_REMOTE = {
       source: 'json',
       codec: {
         mode: 'strict',
-        typeSymbol: 'dsh-hello-plugin#InstalledPluginsApplyChanges',
+        typeSymbol: 'dsh-plugin-manager#InstalledPluginsApplyChanges',
         schema: applyChangesSchema,
       },
     }],
     result: {
       mode: 'strict',
-      typeSymbol: 'dsh-hello-plugin#InstalledPluginsApplyResult',
+      typeSymbol: 'dsh-plugin-manager#InstalledPluginsApplyResult',
       schema: applyResultSchema,
     },
   }],
@@ -184,13 +184,13 @@ const en = {
 }
 
 /**
- * Plugin-owned styles, injected once as a `<style data-plugin="dsh-hello-plugin">`
+ * Plugin-owned styles, injected once as a `<style data-plugin="dsh-plugin-manager">`
  * tag (the module loader claims and removes plugin-owned tags on unload). The
  * trigger row mirrors the Settings trigger rhythm (34px wide row / 36px rail
  * circle) using the shared design tokens.
  */
 const CSS = `
-.dsh-hello-action {
+.dsh-pm-action {
   flex: none;
   display: flex;
   align-items: center;
@@ -205,14 +205,14 @@ const CSS = `
   font-size: 14px;
   line-height: 22px;
 }
-.dsh-hello-action.wide {
+.dsh-pm-action.wide {
   width: calc(100% + 8px);
   height: 34px;
   margin: 4px -4px 4px;
   padding: 6px 2px 6px 10px;
   border-radius: 12px;
 }
-.dsh-hello-action.rail {
+.dsh-pm-action.rail {
   width: 36px;
   height: 36px;
   margin: 8px 0 10px;
@@ -220,26 +220,26 @@ const CSS = `
   justify-content: center;
   border-radius: 50%;
 }
-.dsh-hello-action:hover {
+.dsh-pm-action:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
-.dsh-hello-action-label {
+.dsh-pm-action-label {
   overflow: hidden;
   white-space: nowrap;
 }
-.dsh-hello-message {
+.dsh-pm-message {
   margin: 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 13px;
   line-height: 20px;
 }
-.dsh-hello-error {
+.dsh-pm-error {
   margin: 0;
   color: var(--dsw-alias-label-danger);
   font-size: 13px;
   line-height: 20px;
 }
-.dsh-hello-list {
+.dsh-pm-list {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -247,7 +247,7 @@ const CSS = `
   flex-direction: column;
   gap: 6px;
 }
-.dsh-hello-item {
+.dsh-pm-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -260,18 +260,18 @@ const CSS = `
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   word-break: break-all;
 }
-.dsh-hello-empty-note {
+.dsh-pm-empty-note {
   margin: 12px 0 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;
 }
-.dsh-hello-item-name {
+.dsh-pm-item-name {
   flex: 1;
   min-width: 0;
   word-break: break-all;
 }
-.dsh-hello-status {
+.dsh-pm-status {
   flex: none;
   font-size: 12px;
   line-height: 18px;
@@ -279,25 +279,25 @@ const CSS = `
   border-radius: 6px;
   color: var(--dsw-alias-label-tertiary);
 }
-.dsh-hello-status--active {
+.dsh-pm-status--active {
   color: var(--dsw-alias-label-success, #22c55e);
 }
-.dsh-hello-status--failed {
+.dsh-pm-status--failed {
   color: var(--dsw-alias-label-danger);
 }
-.dsh-hello-status--loading {
+.dsh-pm-status--loading {
   color: var(--dsw-alias-label-tertiary);
 }
-.dsh-hello-status--disabled {
+.dsh-pm-status--disabled {
   color: var(--dsw-alias-label-tertiary);
 }
-.dsh-hello-self-note {
+.dsh-pm-self-note {
   flex: none;
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
 }
-.dsh-hello-switch {
+.dsh-pm-switch {
   appearance: none;
   -webkit-appearance: none;
   flex: none;
@@ -310,7 +310,7 @@ const CSS = `
   cursor: pointer;
   transition: background 0.15s ease;
 }
-.dsh-hello-switch::before {
+.dsh-pm-switch::before {
   content: '';
   position: absolute;
   top: 2px;
@@ -321,19 +321,19 @@ const CSS = `
   background: var(--dsw-alias-label-primary);
   transition: transform 0.15s ease;
 }
-.dsh-hello-switch:checked {
+.dsh-pm-switch:checked {
   background: var(--dsw-alias-accent, #4d6bfe);
 }
-.dsh-hello-switch:checked::before {
+.dsh-pm-switch:checked::before {
   transform: translateX(16px);
 }
-.dsh-hello-restart-actions {
+.dsh-pm-restart-actions {
   margin-top: 12px;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
-.dsh-hello-reload {
+.dsh-pm-reload {
   border: none;
   border-radius: 8px;
   padding: 6px 12px;
@@ -351,9 +351,9 @@ let stylesInjected = false
 function ensureStyles() {
   if (stylesInjected || typeof document === 'undefined') return
   stylesInjected = true
-  if (document.querySelector('style[data-plugin="dsh-hello-plugin"]') !== null) return
+  if (document.querySelector('style[data-plugin="dsh-plugin-manager"]') !== null) return
   const tag = document.createElement('style')
-  tag.dataset.plugin = 'dsh-hello-plugin'
+  tag.dataset.plugin = 'dsh-plugin-manager'
   tag.textContent = CSS
   document.head.appendChild(tag)
 }
@@ -368,7 +368,7 @@ function ensureStyles() {
  * seat, and the `listInstalled`/`applyChanges` business faces injected at
  * registration.
  */
-function HelloPluginAction({ wide, t, listInstalled, applyChanges }) {
+function PluginManagerAction({ wide, t, listInstalled, applyChanges }) {
   const [open, setOpen] = useState(false)
   // phase: 'idle' | 'loading' | 'ready' | 'error'
   const [state, setState] = useState({ phase: 'idle' })
@@ -421,14 +421,14 @@ function HelloPluginAction({ wide, t, listInstalled, applyChanges }) {
     <>
       <button
         type="button"
-        className={`dsh-hello-action${wide ? ' wide' : ' rail'}`}
+        className={`dsh-pm-action${wide ? ' wide' : ' rail'}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         title={t('label')}
         onClick={openModal}
       >
         <IconCordisPluginOutline14 size={wide ? 14 : 18} />
-        {wide && <span className="dsh-hello-action-label">{t('label')}</span>}
+        {wide && <span className="dsh-pm-action-label">{t('label')}</span>}
       </button>
       <Modal
         open={open}
@@ -436,34 +436,34 @@ function HelloPluginAction({ wide, t, listInstalled, applyChanges }) {
         title={t('dialog.title')}
         closeLabel={t('close')}
       >
-        {state.phase === 'loading' && <p className="dsh-hello-message">{t('dialog.loading')}</p>}
+        {state.phase === 'loading' && <p className="dsh-pm-message">{t('dialog.loading')}</p>}
         {state.phase === 'error' && (
-          <p className="dsh-hello-error">{t('dialog.error')}: {state.error}</p>
+          <p className="dsh-pm-error">{t('dialog.error')}: {state.error}</p>
         )}
         {applyError !== null && (
-          <p className="dsh-hello-error">{t('apply.failed')}: {applyError}</p>
+          <p className="dsh-pm-error">{t('apply.failed')}: {applyError}</p>
         )}
         {state.phase === 'ready' && (state.entries.length === 0 ? (
           <>
-            <p className="dsh-hello-message">{t('dialog.empty')}</p>
-            <p className="dsh-hello-empty-note">dsh plugin --profile web add &lt;package&gt;</p>
+            <p className="dsh-pm-message">{t('dialog.empty')}</p>
+            <p className="dsh-pm-empty-note">dsh plugin --profile web add &lt;package&gt;</p>
           </>
         ) : (
-          <ul className="dsh-hello-list">
+          <ul className="dsh-pm-list">
             {state.entries.map(entry => {
               const enabled = effectiveEnabled(entry)
               const status = statusOf(entry, enabled)
               return (
-                <li key={entry.name} className="dsh-hello-item">
+                <li key={entry.name} className="dsh-pm-item">
                   <IconCordisPluginOutline14 size={14} />
-                  <span className="dsh-hello-item-name">{entry.name}</span>
-                  <span className={`dsh-hello-status dsh-hello-status--${status}`}>{t(`status.${status}`)}</span>
+                  <span className="dsh-pm-item-name">{entry.name}</span>
+                  <span className={`dsh-pm-status dsh-pm-status--${status}`}>{t(`status.${status}`)}</span>
                   {entry.self ? (
-                    <span className="dsh-hello-self-note">{t('self.note')}</span>
+                    <span className="dsh-pm-self-note">{t('self.note')}</span>
                   ) : (
                     <input
                       type="checkbox"
-                      className="dsh-hello-switch"
+                      className="dsh-pm-switch"
                       checked={enabled}
                       aria-label={entry.name}
                       onChange={event => toggle(entry.name, event.target.checked)}
@@ -474,7 +474,7 @@ function HelloPluginAction({ wide, t, listInstalled, applyChanges }) {
             })}
           </ul>
         ))}
-        {applying && <p className="dsh-hello-message">{t('apply.applying')}</p>}
+        {applying && <p className="dsh-pm-message">{t('apply.applying')}</p>}
       </Modal>
       <Modal
         open={restart !== null}
@@ -482,16 +482,16 @@ function HelloPluginAction({ wide, t, listInstalled, applyChanges }) {
         title={t('restart.title')}
         closeLabel={t('close')}
       >
-        <p className="dsh-hello-message">{t('restart.message')}</p>
-        <ul className="dsh-hello-list">
+        <p className="dsh-pm-message">{t('restart.message')}</p>
+        <ul className="dsh-pm-list">
           {(restart?.names ?? []).map(name => (
-            <li key={name} className="dsh-hello-item"><span>{name}</span></li>
+            <li key={name} className="dsh-pm-item"><span>{name}</span></li>
           ))}
         </ul>
-        <div className="dsh-hello-restart-actions">
+        <div className="dsh-pm-restart-actions">
           <button
             type="button"
-            className="dsh-hello-reload"
+            className="dsh-pm-reload"
             onClick={() => window.location.reload()}
           >
             {t('restart.reload')}
@@ -522,7 +522,7 @@ export async function apply(ctx) {
   // into the injected face. (Declaring it in `inject` is impossible: the
   // service only exists after this plugin's own $mount runs.)
   const installedPlugins = ctx.get('remote.installedPlugins')
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-hello-plugin: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-plugin-manager: dictionaries')
   const injected = () => ({
     listInstalled: async () => {
       const result = await installedPlugins.list()
@@ -548,12 +548,12 @@ export async function apply(ctx) {
     () => ctx.slots.inject('sidebar.footer.action', () =>
       ctx.slots.register({
         name: 'sidebar.footer.action',
-        id: 'hello-plugin',
+        id: 'plugin-manager',
         order: 0,
         locale: NS,
         inject: injected,
-        registrant: 'dsh-hello-plugin',
-      }, HelloPluginAction)),
-    'dsh-hello-plugin: sidebar footer action',
+        registrant: 'dsh-plugin-manager',
+      }, PluginManagerAction)),
+    'dsh-plugin-manager: sidebar footer action',
   )
 }

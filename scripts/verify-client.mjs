@@ -39,7 +39,7 @@ globalThis.window = {
 // 2. execute the bundle (new Function: runs in global scope, sees window)
 new Function(readFileSync(bundlePath, 'utf8'))()
 if (captured === undefined) throw new Error('bundle did not register via __ModuleLoader__.load')
-if (captured.id !== 'dsh-hello-plugin') throw new Error(`unexpected bundle id: ${captured.id}`)
+if (captured.id !== 'dsh-plugin-manager') throw new Error(`unexpected bundle id: ${captured.id}`)
 
 // 3. materialize with a module-table-mirroring require
 // Anchor at a package that depends on react (the checkout root does not).
@@ -92,7 +92,7 @@ const ctx = {
       return {
         list: async () => {
           remoteCalls.push('installedPlugins.list')
-          return { ok: true, value: { entries: [{ name: 'dsh-hello-plugin', enabled: true, fiberPhase: 'active', self: true }] } }
+          return { ok: true, value: { entries: [{ name: 'dsh-plugin-manager', enabled: true, fiberPhase: 'active', self: true }] } }
         },
         apply: async (changes) => {
           remoteCalls.push(`installedPlugins.apply:${JSON.stringify(changes)}`)
@@ -134,7 +134,7 @@ if (changesParam?.name !== 'changes' || changesParam?.wire !== 'changes' || chan
 
 const registerCall = registered.find(r => r.options.name === 'sidebar.footer.action')
 if (registerCall === undefined) throw new Error('no sidebar.footer.action registration')
-if (registerCall.options.id !== 'hello-plugin') throw new Error(`unexpected action id: ${registerCall.options.id}`)
+if (registerCall.options.id !== 'plugin-manager') throw new Error(`unexpected action id: ${registerCall.options.id}`)
 if (typeof registerCall.component !== 'function') throw new Error('action component is not a function')
 if (!calls.some(([kind]) => kind === 'locale.register')) throw new Error('locale dictionary not registered')
 // The injected business face must call the host remote through the reference
@@ -144,7 +144,7 @@ if (typeof injected.listInstalled !== 'function') throw new Error('listInstalled
 await injected.listInstalled()
 if (!remoteCalls.includes('installedPlugins.list')) throw new Error('listInstalled did not call the mounted installedPlugins service')
 if (typeof injected.applyChanges !== 'function') throw new Error('applyChanges not injected')
-await injected.applyChanges([{ name: 'dsh-hello-plugin', enabled: false }])
+await injected.applyChanges([{ name: 'dsh-plugin-manager', enabled: false }])
 if (!remoteCalls.some(call => call.startsWith('installedPlugins.apply'))) throw new Error('applyChanges did not call the mounted installedPlugins/apply service')
 
 console.log('verify-client: PASS')
