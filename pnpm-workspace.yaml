@@ -1,2 +1,5 @@
+# pnpm build-script policy: esbuild 0.25 ships its platform binary through
+# optionalDependencies, so its postinstall is not required — reject it to keep
+# installs quiet and reproducible.
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: false
