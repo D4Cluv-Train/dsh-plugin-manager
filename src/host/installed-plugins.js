@@ -58,6 +58,31 @@ function aggregatePhase(rows) {
   return worst
 }
 
+/**
+ * Collect the entry ids (and their module specifiers) a bundle patch layer
+ * inserts — top-level rows and children nested in group entries. Aggregator
+ * bundles insert rows named after their sub-packages (e.g. `@linxin666/dsh-pet`),
+ * so a module-name match against the package alone misses most of them; the
+ * bundle's own `cordis.patch.yml` is the authoritative list of what it owns.
+ * @param patches - parsed patch list from the bundle's `dsh.bundle.patch`.
+ * @param ids - Set of contributed entry ids to fill.
+ * @param modules - Set of contributed module specifiers to fill.
+ */
+function collectContributed(patches, ids, modules) {
+  for (const patch of patches ?? []) {
+    if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) continue
+    if (!Array.isArray(patch.insert)) continue
+    for (const entry of patch.insert) {
+      if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) continue
+      if (typeof entry.id === 'string' && entry.id !== '') ids.add(entry.id)
+      if (typeof entry.name === 'string' && entry.name !== '') modules.add(entry.name)
+      if (entry.group === true && Array.isArray(entry.config)) {
+        collectContributed(entry.config, ids, modules)
+      }
+    }
+  }
+}
+
 /** One self-installed profile bundle (live status included). */
 export class InstalledPluginsGateway extends TypertRemoteService {
   static inject = ['loader']
@@ -70,31 +95,52 @@ export class InstalledPluginsGateway extends TypertRemoteService {
     super(ctx, 'installedPlugins')
   }
 
-  /** Entry ids contributed by a package (its Loader rows, by module specifier). */
-  entryIdsFor(packageName) {
-    const ids = []
+  /**
+   * Entry ids (and modules) a package contributes. Primary source: the
+   * bundle's own `dsh.bundle.patch` (`cordis.patch.yml`), which lists every row
+   * it inserts; fallback: Loader rows whose module specifier is the package (or
+   * a subpath). Aggregator bundles name most inserted rows after sub-packages,
+   * so both sources are merged.
+   * @param profileDir - profile directory (resolution anchor for node_modules).
+   * @param packageName - the bundle's package name.
+   */
+  async entryIdsFor(profileDir, packageName) {
+    const ids = new Set()
+    const modules = new Set()
+    try {
+      const pkgDir = join(profileDir, 'node_modules', packageName)
+      const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'))
+      const patchRel = pkg?.dsh?.bundle?.patch
+      if (typeof patchRel === 'string' && patchRel !== '') {
+        const patches = await readPatchRows(join(pkgDir, patchRel))
+        collectContributed(patches, ids, modules)
+      }
+    } catch {
+      // Unreadable/unparseable patch — fall back to the Loader-row match below.
+    }
     for (const entry of this.ctx.loader.entries()) {
       const moduleName = entry.options.name
       if (moduleName === packageName || moduleName.startsWith(`${packageName}/`)) {
-        ids.push(entry.options.id)
+        ids.add(entry.options.id)
+        modules.add(moduleName)
       }
     }
-    return ids
+    return { ids: [...ids], modules: [...modules] }
   }
 
   /** Live status of one package: enabled + worst fiber phase across its entries. */
-  describe(packageName) {
-    const rows = []
-    for (const entry of this.ctx.loader.entries()) {
-      const moduleName = entry.options.name
-      if (moduleName === packageName || moduleName.startsWith(`${packageName}/`)) {
-        rows.push({
-          entryId: entry.options.id,
-          enabled: !entry.disabled,
-          fiberPhase: entry.fiber === undefined ? null : (FIBER_PHASE[entry.fiber.state] ?? null),
-        })
-      }
-    }
+  async describe(profileDir, packageName) {
+    const { ids } = await this.entryIdsFor(profileDir, packageName)
+    const byId = new Map()
+    for (const entry of this.ctx.loader.entries()) byId.set(entry.options.id, entry)
+    const rows = ids
+      .map(id => byId.get(id))
+      .filter(entry => entry !== undefined)
+      .map(entry => ({
+        entryId: entry.options.id,
+        enabled: !entry.disabled,
+        fiberPhase: entry.fiber === undefined ? null : (FIBER_PHASE[entry.fiber.state] ?? null),
+      }))
     return {
       name: packageName,
       self: packageName === SELF_PACKAGE,
@@ -118,30 +164,33 @@ export class InstalledPluginsGateway extends TypertRemoteService {
    * @returns `{ entries }` where each entry is `{ name, self, enabled, fiberPhase }`.
    */
   @Remote('list')
-  list() {
+  async list() {
     // ctx.baseUrl is the profile directory (boot anchors it at the profile's
     // cordis.yml). The profile manifest carries both halves of the contract:
     // dsh.profile.bundles (ordered bundle layers) and dependencies (what the
     // user's `dsh plugin add` actually installed).
+    const profileDir = fileURLToPath(this.ctx.baseUrl)
     let manifest
     try {
-      const profileDir = fileURLToPath(this.ctx.baseUrl)
       manifest = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8'))
     } catch (error) {
       return { entries: [], error: String(error) }
     }
     const bundles = manifest.dsh?.profile?.bundles ?? []
     const dependencies = Object.keys(manifest.dependencies ?? {})
-    const entries = bundles
-      .filter((packageName) => dependencies.includes(packageName))
-      .map((packageName) => this.describe(packageName))
+    const entries = []
+    for (const packageName of bundles) {
+      if (!dependencies.includes(packageName)) continue
+      entries.push(await this.describe(profileDir, packageName))
+    }
     return { entries }
   }
 
   /**
    * Enable/disable a set of bundles. Takes effect on write (host entries are
-   * live-reloaded by the boot HMR watcher); bundles with a client half are
-   * reported for the caller to prompt a reload.
+   * live-reloaded by the boot HMR watcher); bundles with a client half — their
+   * own or any contributed entry's module — are reported for the caller to
+   * prompt a reload.
    * @param changes - `[{ name, enabled }]`.
    * @returns `{ needsReload, names }`.
    */
@@ -155,11 +204,14 @@ export class InstalledPluginsGateway extends TypertRemoteService {
       const packageName = change?.name
       if (typeof packageName !== 'string' || packageName === '') continue
       if (packageName === SELF_PACKAGE) continue
-      const ids = this.entryIdsFor(packageName)
+      const { ids, modules } = await this.entryIdsFor(profileDir, packageName)
       if (ids.length === 0) continue
       const disable = change.enabled !== true
       for (const id of ids) changesById.set(id, disable)
-      if (this.hasClientHalf(profileDir, packageName)) names.push(packageName)
+      if (this.hasClientHalf(profileDir, packageName)
+        || modules.some(moduleName => this.hasClientHalf(profileDir, moduleName))) {
+        names.push(packageName)
+      }
     }
     if (changesById.size > 0) {
       await applyEnabledChanges(file, changesById)
