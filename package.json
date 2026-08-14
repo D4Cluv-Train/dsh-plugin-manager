@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh-typert-protocol": "0.1.0-rc.6",
-    "esbuild": "^0.25.12"
+    "esbuild": "^0.25.12",
+    "js-yaml": "^4.1.0"
   }
 }

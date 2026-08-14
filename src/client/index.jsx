@@ -59,9 +59,42 @@ const NS = 'helloPlugin'
 const listResultSchema = {
   parse(value) {
     if (value === null || typeof value !== 'object' || !Array.isArray(value.entries)) {
-      throw new TypeError('installedPlugins/list result must be { entries: [{ name }] }')
+      throw new TypeError('installedPlugins/list result must be { entries: [...] }')
     }
-    return { entries: value.entries.map(entry => ({ name: String(entry?.name) })) }
+    return {
+      entries: value.entries.map(entry => ({
+        name: String(entry?.name),
+        enabled: Boolean(entry?.enabled),
+        fiberPhase: entry?.fiberPhase ?? null,
+        self: Boolean(entry?.self),
+      })),
+    }
+  },
+}
+
+/** Strict codec for installedPlugins/apply parameters: `[{ name, enabled }]`. */
+const applyChangesSchema = {
+  parse(value) {
+    if (!Array.isArray(value)) {
+      throw new TypeError('installedPlugins/apply requires [{ name, enabled }]')
+    }
+    return value.map(change => ({
+      name: String(change?.name),
+      enabled: Boolean(change?.enabled),
+    }))
+  },
+}
+
+/** Strict codec for installedPlugins/apply result: `{ needsReload, names }`. */
+const applyResultSchema = {
+  parse(value) {
+    if (value === null || typeof value !== 'object') {
+      throw new TypeError('installedPlugins/apply result must be an object')
+    }
+    return {
+      needsReload: Boolean(value.needsReload),
+      names: Array.isArray(value.names) ? value.names.map(name => String(name)) : [],
+    }
   },
 }
 
@@ -86,6 +119,27 @@ const INSTALLED_PLUGINS_REMOTE = {
       typeSymbol: 'dsh-hello-plugin#InstalledPluginsListResult',
       schema: listResultSchema,
     },
+  }, {
+    id: 'dsh-hello-plugin#installedPlugins/apply',
+    service: 'installedPlugins',
+    namespace: 'installedPlugins',
+    method: 'apply',
+    invocation: { kind: 'direct' },
+    parameters: [{
+      name: 'changes',
+      wire: 'changes',
+      source: 'json',
+      codec: {
+        mode: 'strict',
+        typeSymbol: 'dsh-hello-plugin#InstalledPluginsApplyChanges',
+        schema: applyChangesSchema,
+      },
+    }],
+    result: {
+      mode: 'strict',
+      typeSymbol: 'dsh-hello-plugin#InstalledPluginsApplyResult',
+      schema: applyResultSchema,
+    },
   }],
 }
 
@@ -97,6 +151,16 @@ const zh = {
   'dialog.empty': '暂无自行安装的插件',
   'dialog.error': '加载插件列表失败',
   'close': '关闭',
+  'status.active': '运行中',
+  'status.failed': '加载失败',
+  'status.loading': '加载中',
+  'status.disabled': '已关闭',
+  'self.note': '管理器插件不可禁用',
+  'apply.applying': '正在应用…',
+  'apply.failed': '应用失败',
+  'restart.title': '需要重启 dsh',
+  'restart.message': '以下插件包含界面组件，需重启 dsh（或刷新页面）后生效：',
+  'restart.reload': '立即刷新',
 }
 
 /** English dictionary, checked complete against the zh key set. */
@@ -107,6 +171,16 @@ const en = {
   'dialog.empty': 'No user-installed plugins',
   'dialog.error': 'Failed to load the plugin list',
   'close': 'Close',
+  'status.active': 'Running',
+  'status.failed': 'Failed',
+  'status.loading': 'Loading',
+  'status.disabled': 'Disabled',
+  'self.note': 'The manager plugin cannot be disabled',
+  'apply.applying': 'Applying…',
+  'apply.failed': 'Failed to apply',
+  'restart.title': 'Restart required',
+  'restart.message': 'These plugins include UI components and need a dsh restart (or page reload) to take effect:',
+  'restart.reload': 'Reload now',
 }
 
 /**
@@ -192,6 +266,84 @@ const CSS = `
   font-size: 12px;
   line-height: 18px;
 }
+.dsh-hello-item-name {
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+}
+.dsh-hello-status {
+  flex: none;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 0 6px;
+  border-radius: 6px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.dsh-hello-status--active {
+  color: var(--dsw-alias-label-success, #22c55e);
+}
+.dsh-hello-status--failed {
+  color: var(--dsw-alias-label-danger);
+}
+.dsh-hello-status--loading {
+  color: var(--dsw-alias-label-tertiary);
+}
+.dsh-hello-status--disabled {
+  color: var(--dsw-alias-label-tertiary);
+}
+.dsh-hello-self-note {
+  flex: none;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.dsh-hello-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.dsh-hello-switch::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-primary);
+  transition: transform 0.15s ease;
+}
+.dsh-hello-switch:checked {
+  background: var(--dsw-alias-accent, #4d6bfe);
+}
+.dsh-hello-switch:checked::before {
+  transform: translateX(16px);
+}
+.dsh-hello-restart-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.dsh-hello-reload {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  background: var(--dsw-alias-accent, #4d6bfe);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+}
 `
 
 let stylesInjected = false
@@ -208,22 +360,63 @@ function ensureStyles() {
 
 /**
  * The sidebar footer action: a "插件" trigger row (icon + label when wide,
- * circle icon on the rail) opening a modal listing user-installed plugins.
+ * circle icon on the rail) opening a modal that lists user-installed plugins
+ * with a status badge and an enable/disable switch. Toggles are staged locally
+ * and applied in ONE `installedPlugins/apply` call when the modal closes; if a
+ * changed plugin ships a client half, a second modal prompts a reload.
  * @param props - `{ wide }` owner share from the sidebar shell, the locale
- * seat, and the `listInstalled` business face injected at registration.
+ * seat, and the `listInstalled`/`applyChanges` business faces injected at
+ * registration.
  */
-function HelloPluginAction({ wide, t, listInstalled }) {
+function HelloPluginAction({ wide, t, listInstalled, applyChanges }) {
   const [open, setOpen] = useState(false)
   // phase: 'idle' | 'loading' | 'ready' | 'error'
   const [state, setState] = useState({ phase: 'idle' })
-  const close = () => { setOpen(false) }
+  const [pending, setPending] = useState({})
+  const [applying, setApplying] = useState(false)
+  const [applyError, setApplyError] = useState(null)
+  const [restart, setRestart] = useState(null)
+
+  const effectiveEnabled = (entry) =>
+    Object.prototype.hasOwnProperty.call(pending, entry.name) ? pending[entry.name] : entry.enabled
+
   const openModal = () => {
     setOpen(true)
     setState({ phase: 'loading' })
+    setPending({})
+    setApplyError(null)
     listInstalled()
       .then(entries => { setState({ phase: 'ready', entries }) })
       .catch(error => { setState({ phase: 'error', error: String(error) }) })
   }
+
+  const close = () => {
+    if (applying) return
+    const changes = Object.entries(pending).map(([name, enabled]) => ({ name, enabled }))
+    if (changes.length === 0) { setOpen(false); return }
+    setApplying(true)
+    setApplyError(null)
+    applyChanges(changes)
+      .then(async result => {
+        const entries = await listInstalled()
+        setState({ phase: 'ready', entries })
+        setPending({})
+        setOpen(false)
+        if (result.needsReload && result.names.length > 0) setRestart({ names: result.names })
+      })
+      .catch(error => { setApplyError(String(error)) })
+      .finally(() => { setApplying(false) })
+  }
+
+  const toggle = (name, enabled) => setPending(prev => ({ ...prev, [name]: enabled }))
+
+  const statusOf = (entry, enabled) => {
+    if (!enabled) return 'disabled'
+    if (entry.fiberPhase === 'failed') return 'failed'
+    if (entry.fiberPhase === 'active') return 'active'
+    return 'loading'
+  }
+
   return (
     <>
       <button
@@ -247,6 +440,9 @@ function HelloPluginAction({ wide, t, listInstalled }) {
         {state.phase === 'error' && (
           <p className="dsh-hello-error">{t('dialog.error')}: {state.error}</p>
         )}
+        {applyError !== null && (
+          <p className="dsh-hello-error">{t('apply.failed')}: {applyError}</p>
+        )}
         {state.phase === 'ready' && (state.entries.length === 0 ? (
           <>
             <p className="dsh-hello-message">{t('dialog.empty')}</p>
@@ -254,14 +450,53 @@ function HelloPluginAction({ wide, t, listInstalled }) {
           </>
         ) : (
           <ul className="dsh-hello-list">
-            {state.entries.map(entry => (
-              <li key={entry.name} className="dsh-hello-item">
-                <IconCordisPluginOutline14 size={14} />
-                <span>{entry.name}</span>
-              </li>
-            ))}
+            {state.entries.map(entry => {
+              const enabled = effectiveEnabled(entry)
+              const status = statusOf(entry, enabled)
+              return (
+                <li key={entry.name} className="dsh-hello-item">
+                  <IconCordisPluginOutline14 size={14} />
+                  <span className="dsh-hello-item-name">{entry.name}</span>
+                  <span className={`dsh-hello-status dsh-hello-status--${status}`}>{t(`status.${status}`)}</span>
+                  {entry.self ? (
+                    <span className="dsh-hello-self-note">{t('self.note')}</span>
+                  ) : (
+                    <input
+                      type="checkbox"
+                      className="dsh-hello-switch"
+                      checked={enabled}
+                      aria-label={entry.name}
+                      onChange={event => toggle(entry.name, event.target.checked)}
+                    />
+                  )}
+                </li>
+              )
+            })}
           </ul>
         ))}
+        {applying && <p className="dsh-hello-message">{t('apply.applying')}</p>}
+      </Modal>
+      <Modal
+        open={restart !== null}
+        onClose={() => setRestart(null)}
+        title={t('restart.title')}
+        closeLabel={t('close')}
+      >
+        <p className="dsh-hello-message">{t('restart.message')}</p>
+        <ul className="dsh-hello-list">
+          {(restart?.names ?? []).map(name => (
+            <li key={name} className="dsh-hello-item"><span>{name}</span></li>
+          ))}
+        </ul>
+        <div className="dsh-hello-restart-actions">
+          <button
+            type="button"
+            className="dsh-hello-reload"
+            onClick={() => window.location.reload()}
+          >
+            {t('restart.reload')}
+          </button>
+        </div>
       </Modal>
     </>
   )
@@ -300,6 +535,13 @@ export async function apply(ctx) {
         throw new Error(`installedPlugins.list failed: ${result.value.error}`)
       }
       return result.value.entries
+    },
+    applyChanges: async (changes) => {
+      const result = await installedPlugins.apply(changes)
+      if (!result.ok) {
+        throw new Error(`installedPlugins.apply failed: ${result.error.code}: ${result.error.message}`)
+      }
+      return result.value
     },
   })
   ctx.effect(

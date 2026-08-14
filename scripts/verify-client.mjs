@@ -92,7 +92,11 @@ const ctx = {
       return {
         list: async () => {
           remoteCalls.push('installedPlugins.list')
-          return { ok: true, value: { entries: [{ name: 'dsh-hello-plugin' }] } }
+          return { ok: true, value: { entries: [{ name: 'dsh-hello-plugin', enabled: true, fiberPhase: 'active', self: true }] } }
+        },
+        apply: async (changes) => {
+          remoteCalls.push(`installedPlugins.apply:${JSON.stringify(changes)}`)
+          return { ok: true, value: { needsReload: false, names: [] } }
         },
       }
     }
@@ -117,6 +121,17 @@ if (mountedDescriptor.result?.mode !== 'strict' || typeof mountedDescriptor.resu
   throw new Error('installedPlugins/list result codec is not strict with a parse() schema')
 }
 
+const applyDescriptor = mounted.flatMap(c => c.descriptors ?? []).find(d => d.namespace === 'installedPlugins' && d.method === 'apply')
+if (applyDescriptor === undefined) throw new Error('installedPlugins/apply contribution was not mounted via ctx.remote.$mount')
+if (applyDescriptor.invocation?.kind !== 'direct') throw new Error(`unexpected apply invocation: ${JSON.stringify(applyDescriptor.invocation)}`)
+if (applyDescriptor.result?.mode !== 'strict' || typeof applyDescriptor.result?.schema?.parse !== 'function') {
+  throw new Error('installedPlugins/apply result codec is not strict with a parse() schema')
+}
+const changesParam = applyDescriptor.parameters?.[0]
+if (changesParam?.name !== 'changes' || changesParam?.wire !== 'changes' || changesParam?.codec?.mode !== 'strict' || typeof changesParam?.codec?.schema?.parse !== 'function') {
+  throw new Error('installedPlugins/apply must declare a strict `changes` parameter codec')
+}
+
 const registerCall = registered.find(r => r.options.name === 'sidebar.footer.action')
 if (registerCall === undefined) throw new Error('no sidebar.footer.action registration')
 if (registerCall.options.id !== 'hello-plugin') throw new Error(`unexpected action id: ${registerCall.options.id}`)
@@ -128,11 +143,15 @@ const injected = registerCall.options.inject()
 if (typeof injected.listInstalled !== 'function') throw new Error('listInstalled not injected')
 await injected.listInstalled()
 if (!remoteCalls.includes('installedPlugins.list')) throw new Error('listInstalled did not call the mounted installedPlugins service')
+if (typeof injected.applyChanges !== 'function') throw new Error('applyChanges not injected')
+await injected.applyChanges([{ name: 'dsh-hello-plugin', enabled: false }])
+if (!remoteCalls.some(call => call.startsWith('installedPlugins.apply'))) throw new Error('applyChanges did not call the mounted installedPlugins/apply service')
 
 console.log('verify-client: PASS')
 console.log(`  externals required: ${[...seen].join(', ')}`)
 console.log(`  inject: ${JSON.stringify(exports.inject)}`)
 console.log(`  mount: ${mountedDescriptor.namespace}/${mountedDescriptor.method} (${mountedDescriptor.result.mode})`)
+console.log(`  mount: ${applyDescriptor.namespace}/${applyDescriptor.method} (${applyDescriptor.result.mode}, param ${changesParam.wire})`)
 console.log(`  registration: ${registerCall.options.name} id=${registerCall.options.id} order=${registerCall.options.order}`)
 console.log(`  remote: ${remoteCalls.join(', ')}`)
 process.exit(0)
