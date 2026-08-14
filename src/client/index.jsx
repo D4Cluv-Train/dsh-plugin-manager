@@ -190,6 +190,15 @@ const en = {
  * circle) using the shared design tokens.
  */
 const CSS = `
+.dsh-pm-modal {
+  width: 60vw !important;
+  max-width: 960px !important;
+  min-width: 420px !important;
+}
+.dsh-pm-modal .dsh-pm-list {
+  max-height: 60vh;
+  overflow-y: auto;
+}
 .dsh-pm-action {
   flex: none;
   display: flex;
@@ -435,6 +444,7 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges }) {
         onClose={close}
         title={t('dialog.title')}
         closeLabel={t('close')}
+        className="dsh-pm-modal"
       >
         {state.phase === 'loading' && <p className="dsh-pm-message">{t('dialog.loading')}</p>}
         {state.phase === 'error' && (
