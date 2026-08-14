@@ -1,0 +1,9 @@
+# dsh-hello-plugin bundle patch: one entry inserted into the profile tree.
+# `dsh.bundle.patch` in package.json points here. The composed profile applies
+# this insert over the empty profile root (after @deepseek-ai/dsh-base, before
+# the profile's own cordis.patch.yml). The plugin module declares its own
+# `inject: ['webServer']`, so the Loader mounts this row only after the web
+# surface's WebServer service is available.
+- insert:
+    - id: hello-plugin
+      name: dsh-hello-plugin

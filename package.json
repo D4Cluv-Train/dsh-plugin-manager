@@ -1,0 +1,40 @@
+{
+  "name": "dsh-hello-plugin",
+  "version": "0.1.0",
+  "description": "MVP dsh bundle plugin: proves it loaded by registering a /hello-plugin web route, logging, writing a marker file, and adding a sidebar '插件' button that opens an empty modal",
+  "type": "module",
+  "main": "./lib/plugin.mjs",
+  "exports": {
+    ".": "./lib/plugin.mjs",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "build:client": "node scripts/build-client.mjs",
+    "verify:client": "node scripts/verify-client.mjs"
+  },
+  "private": true,
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  }
+}
