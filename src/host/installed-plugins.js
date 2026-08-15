@@ -455,10 +455,21 @@ export class InstalledPluginsGateway extends TypertRemoteService {
       manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles: next } }
       writeFileSync(manifestPath, JSON.stringify(manifest, undefined, 2) + '\n')
     }
-    // Clean up managed disabled rows for the removed package's entries.
-    const { ids } = await this.entryIdsFor(profileDir, spec)
-    if (ids.length > 0) {
-      await applyEnabledChanges(join(profileDir, 'cordis.patch.yml'), new Map(ids.map(id => [id, false])))
+    // Clean up managed disabled rows and drop the removed package's live
+    // entries so the running server's client graph updates immediately — a
+    // stale row would 404 its bundle script on a plain page refresh.
+    const ids = new Set((await this.entryIdsFor(profileDir, spec)).ids)
+    if (ids.size > 0) {
+      await applyEnabledChanges(join(profileDir, 'cordis.patch.yml'), new Map([...ids].map(id => [id, false])))
+      for (const entry of this.ctx.loader.entries()) {
+        if (!ids.has(entry.options.id)) continue
+        try {
+          await entry.update({ disabled: true })
+        } catch {
+          // The module is already gone from node_modules; the restart cleans up
+          // any leftover tree state, so a disposal failure is non-fatal.
+        }
+      }
     }
     return { needsRestart: true, name: spec }
   }
