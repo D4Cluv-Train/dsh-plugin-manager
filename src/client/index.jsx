@@ -908,7 +908,7 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
                           <button
                             type="button"
                             className="dsh-pm-remove-btn"
-                            disabled={removing}
+                            disabled={removing || removed[entry.name]}
                             onClick={() => handleDeleteClick(entry.name)}
                           >
                             {t('remove')}
