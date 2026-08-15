@@ -334,8 +334,8 @@ export class InstalledPluginsGateway extends TypertRemoteService {
    * @param spec - package name or git URL to install (the argument to `dsh plugin add`).
    * @returns `{ needsRestart, name }`.
    */
-  @Remote('install')
-  async install(spec) {
+  @Remote('installPlugin')
+  async installPlugin(spec) {
     if (typeof spec !== 'string' || spec === '' || spec.startsWith('-')) {
       throw new Error('install: invalid package spec')
     }

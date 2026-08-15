@@ -189,10 +189,10 @@ const INSTALLED_PLUGINS_REMOTE = {
       schema: discoverResultSchema,
     },
   }, {
-    id: 'dsh-plugin-manager#installedPlugins/install',
+    id: 'dsh-plugin-manager#installedPlugins/installPlugin',
     service: 'installedPlugins',
     namespace: 'installedPlugins',
-    method: 'install',
+    method: 'installPlugin',
     invocation: { kind: 'direct' },
     parameters: [{
       name: 'spec',
@@ -573,10 +573,10 @@ function ensureStyles() {
  * the modal closes), and "发现" lists plugins from the awesome-dsh-plugin
  * registry with one-click install.
  * @param props - `{ wide }` owner share from the sidebar shell, the locale
- * seat, and the `listInstalled`/`applyChanges`/`discover`/`install` business
- * faces injected at registration.
+ * seat, and the `listInstalled`/`applyChanges`/`discover`/`installPlugin`
+ * business faces injected at registration.
  */
-function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, install }) {
+function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, installPlugin }) {
   const [open, setOpen] = useState(false)
   // installed tab: phase 'idle' | 'loading' | 'ready' | 'error'
   const [state, setState] = useState({ phase: 'idle' })
@@ -617,7 +617,7 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
   const handleInstall = (spec) => {
     setInstallingSpec(spec)
     setInstallResult(null)
-    install(spec)
+    installPlugin(spec)
       .then(result => setInstallResult({ ok: true, needsRestart: result.needsRestart, name: result.name }))
       .catch(error => setInstallResult({ ok: false, message: String(error) }))
       .finally(() => { setInstallingSpec(null) })
@@ -836,10 +836,10 @@ export async function apply(ctx) {
       }
       return result.value.plugins
     },
-    install: async (spec) => {
-      const result = await installedPlugins.install(spec)
+    installPlugin: async (spec) => {
+      const result = await installedPlugins.installPlugin(spec)
       if (!result.ok) {
-        throw new Error(`installedPlugins.install failed: ${result.error.code}: ${result.error.message}`)
+        throw new Error(`installedPlugins.installPlugin failed: ${result.error.code}: ${result.error.message}`)
       }
       return result.value
     },
