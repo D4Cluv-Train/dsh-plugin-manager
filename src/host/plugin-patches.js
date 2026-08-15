@@ -1,5 +1,5 @@
 /**
- * dsh-plugin-manager — profile `cordis.patch.yml` merge read/write helpers.
+ * @d4cluvtrain/dsh-plugin-manager — profile `cordis.patch.yml` merge read/write helpers.
  *
  * The profile's own `cordis.patch.yml` is the user-override patch layer: it is
  * applied AFTER every bundle patch (later rows win per entry id) and is

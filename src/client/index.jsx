@@ -1,12 +1,12 @@
 /**
- * dsh-plugin-manager — browser client half.
+ * @d4cluvtrain/dsh-plugin-manager — browser client half.
  *
  * Registers a "插件" (Plugins) action into the sidebar's `sidebar.footer.action`
  * slot — the optional actions row rendered beside the Settings trigger at the
  * sidebar foot (declared by @deepseek-ai/dsh-client-ui-sidebar). Clicking the
  * button opens a modal that lists the plugins the user installed themselves
  * (via `dsh plugin --profile web add <pkg>`), fetched from the host-side
- * `installedPlugins` Typert remote (dsh-plugin-manager/installed-plugins).
+ * `installedPlugins` Typert remote (@d4cluvtrain/dsh-plugin-manager/installed-plugins).
  * Shipped template bundles (dsh-base, dsh-web-app) are excluded by the host:
  * only `dsh.profile.bundles` entries that are also profile dependencies.
  *
@@ -142,9 +142,9 @@ const installResultSchema = {
  * what `apply` mounts through `ctx.remote.$mount()`.
  */
 const INSTALLED_PLUGINS_REMOTE = {
-  package: 'dsh-plugin-manager',
+  package: '@d4cluvtrain/dsh-plugin-manager',
   descriptors: [{
-    id: 'dsh-plugin-manager#installedPlugins/list',
+    id: '@d4cluvtrain/dsh-plugin-manager#installedPlugins/list',
     service: 'installedPlugins',
     namespace: 'installedPlugins',
     method: 'list',
@@ -152,11 +152,11 @@ const INSTALLED_PLUGINS_REMOTE = {
     parameters: [],
     result: {
       mode: 'strict',
-      typeSymbol: 'dsh-plugin-manager#InstalledPluginsListResult',
+      typeSymbol: '@d4cluvtrain/dsh-plugin-manager#InstalledPluginsListResult',
       schema: listResultSchema,
     },
   }, {
-    id: 'dsh-plugin-manager#installedPlugins/apply',
+    id: '@d4cluvtrain/dsh-plugin-manager#installedPlugins/apply',
     service: 'installedPlugins',
     namespace: 'installedPlugins',
     method: 'apply',
@@ -167,17 +167,17 @@ const INSTALLED_PLUGINS_REMOTE = {
       source: 'json',
       codec: {
         mode: 'strict',
-        typeSymbol: 'dsh-plugin-manager#InstalledPluginsApplyChanges',
+        typeSymbol: '@d4cluvtrain/dsh-plugin-manager#InstalledPluginsApplyChanges',
         schema: applyChangesSchema,
       },
     }],
     result: {
       mode: 'strict',
-      typeSymbol: 'dsh-plugin-manager#InstalledPluginsApplyResult',
+      typeSymbol: '@d4cluvtrain/dsh-plugin-manager#InstalledPluginsApplyResult',
       schema: applyResultSchema,
     },
   }, {
-    id: 'dsh-plugin-manager#installedPlugins/discover',
+    id: '@d4cluvtrain/dsh-plugin-manager#installedPlugins/discover',
     service: 'installedPlugins',
     namespace: 'installedPlugins',
     method: 'discover',
@@ -185,11 +185,11 @@ const INSTALLED_PLUGINS_REMOTE = {
     parameters: [],
     result: {
       mode: 'strict',
-      typeSymbol: 'dsh-plugin-manager#InstalledPluginsDiscoverResult',
+      typeSymbol: '@d4cluvtrain/dsh-plugin-manager#InstalledPluginsDiscoverResult',
       schema: discoverResultSchema,
     },
   }, {
-    id: 'dsh-plugin-manager#installedPlugins/installPlugin',
+    id: '@d4cluvtrain/dsh-plugin-manager#installedPlugins/installPlugin',
     service: 'installedPlugins',
     namespace: 'installedPlugins',
     method: 'installPlugin',
@@ -200,17 +200,17 @@ const INSTALLED_PLUGINS_REMOTE = {
       source: 'json',
       codec: {
         mode: 'strict',
-        typeSymbol: 'dsh-plugin-manager#InstalledPluginsInstallSpec',
+        typeSymbol: '@d4cluvtrain/dsh-plugin-manager#InstalledPluginsInstallSpec',
         schema: installSpecSchema,
       },
     }],
     result: {
       mode: 'strict',
-      typeSymbol: 'dsh-plugin-manager#InstalledPluginsInstallResult',
+      typeSymbol: '@d4cluvtrain/dsh-plugin-manager#InstalledPluginsInstallResult',
       schema: installResultSchema,
     },
   }, {
-    id: 'dsh-plugin-manager#installedPlugins/uninstall',
+    id: '@d4cluvtrain/dsh-plugin-manager#installedPlugins/uninstall',
     service: 'installedPlugins',
     namespace: 'installedPlugins',
     method: 'uninstall',
@@ -221,13 +221,13 @@ const INSTALLED_PLUGINS_REMOTE = {
       source: 'json',
       codec: {
         mode: 'strict',
-        typeSymbol: 'dsh-plugin-manager#InstalledPluginsUninstallSpec',
+        typeSymbol: '@d4cluvtrain/dsh-plugin-manager#InstalledPluginsUninstallSpec',
         schema: installSpecSchema,
       },
     }],
     result: {
       mode: 'strict',
-      typeSymbol: 'dsh-plugin-manager#InstalledPluginsUninstallResult',
+      typeSymbol: '@d4cluvtrain/dsh-plugin-manager#InstalledPluginsUninstallResult',
       schema: installResultSchema,
     },
   }],
@@ -320,7 +320,7 @@ const en = {
 }
 
 /**
- * Plugin-owned styles, injected once as a `<style data-plugin="dsh-plugin-manager">`
+ * Plugin-owned styles, injected once as a `<style data-plugin="@d4cluvtrain/dsh-plugin-manager">`
  * tag (the module loader claims and removes plugin-owned tags on unload). The
  * trigger row mirrors the Settings trigger rhythm (34px wide row / 36px rail
  * circle) using the shared design tokens.
@@ -715,9 +715,9 @@ let stylesInjected = false
 function ensureStyles() {
   if (stylesInjected || typeof document === 'undefined') return
   stylesInjected = true
-  if (document.querySelector('style[data-plugin="dsh-plugin-manager"]') !== null) return
+  if (document.querySelector('style[data-plugin="@d4cluvtrain/dsh-plugin-manager"]') !== null) return
   const tag = document.createElement('style')
-  tag.dataset.plugin = 'dsh-plugin-manager'
+  tag.dataset.plugin = '@d4cluvtrain/dsh-plugin-manager'
   tag.textContent = CSS
   document.head.appendChild(tag)
 }
@@ -1060,7 +1060,7 @@ export async function apply(ctx) {
   // into the injected face. (Declaring it in `inject` is impossible: the
   // service only exists after this plugin's own $mount runs.)
   const installedPlugins = ctx.get('remote.installedPlugins')
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-plugin-manager: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), '@d4cluvtrain/dsh-plugin-manager: dictionaries')
   const injected = () => ({
     listInstalled: async () => {
       const result = await installedPlugins.list()
@@ -1111,8 +1111,8 @@ export async function apply(ctx) {
         order: 0,
         locale: NS,
         inject: injected,
-        registrant: 'dsh-plugin-manager',
+        registrant: '@d4cluvtrain/dsh-plugin-manager',
       }, PluginManagerAction)),
-    'dsh-plugin-manager: sidebar footer action',
+    '@d4cluvtrain/dsh-plugin-manager: sidebar footer action',
   )
 }

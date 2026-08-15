@@ -1,5 +1,5 @@
 /**
- * dsh-plugin-manager — host-side "installed plugins" remote service.
+ * @d4cluvtrain/dsh-plugin-manager — host-side "installed plugins" remote service.
  *
  * Publishes the Typert Remote `installedPlugins` namespace with two methods:
  *   - `list`: the user-installed bundles (profile bundle layers that are also
@@ -33,7 +33,7 @@ import { applyEnabledChanges, readPatchRows } from './plugin-patches.js'
 export const name = 'installed-plugins'
 
 /** This bundle's package name — the manager must never disable itself. */
-const SELF_PACKAGE = 'dsh-plugin-manager'
+const SELF_PACKAGE = '@d4cluvtrain/dsh-plugin-manager'
 
 /** awesome-dsh-plugin data source for the discover tab (its README lists every plugin). */
 const AWESOME_README_URL = 'https://raw.githubusercontent.com/awesome-dsh-plugin/awesome-dsh-plugin/main/README.md'

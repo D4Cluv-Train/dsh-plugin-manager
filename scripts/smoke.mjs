@@ -1,5 +1,5 @@
 /**
- * Isolated boot smoke test for dsh-plugin-manager.
+ * Isolated boot smoke test for @d4cluvtrain/dsh-plugin-manager.
  *
  * Boots the dsh built bin (`apps/cli/lib/bin.js`) against a scratch DSH_HOME
  * whose `smoke` profile installs THIS bundle (same link layout pnpm uses) plus
@@ -38,7 +38,7 @@ const nodeModules = join(profileDir, 'node_modules')
 mkdirSync(nodeModules, { recursive: true })
 
 // "Installed" bundle: the same symlink layout pnpm's link: dependency uses.
-const link = join(nodeModules, 'dsh-plugin-manager')
+const link = join(nodeModules, '@d4cluvtrain/dsh-plugin-manager')
 rmSync(link, { recursive: true, force: true })
 symlinkSync(projectRoot, link, 'junction')
 
@@ -46,7 +46,7 @@ writeFileSync(join(profileDir, 'package.json'), JSON.stringify({
   name: 'dsh-profile-smoke',
   private: true,
   dependencies: {},
-  dsh: { profile: { bundles: ['dsh-plugin-manager'] } },
+  dsh: { profile: { bundles: ['@d4cluvtrain/dsh-plugin-manager'] } },
 }, undefined, 2) + '\n')
 
 // Minimal webServer provider so the plugin's inject is satisfiable without
@@ -76,7 +76,7 @@ writeFileSync(join(profileDir, 'cordis.patch.yml'), [
   '',
 ].join('\n'))
 
-const marker = join(home, 'dsh-plugin-manager.loaded')
+const marker = join(home, '@d4cluvtrain/dsh-plugin-manager.loaded')
 const routesFile = join(home, 'routes.json')
 const bootLog = join(home, 'boot.log')
 
