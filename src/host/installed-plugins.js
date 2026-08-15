@@ -269,7 +269,10 @@ export class InstalledPluginsGateway extends TypertRemoteService {
     return {
       name: packageName,
       self: packageName === SELF_PACKAGE,
-      enabled: rows.length > 0 && rows.every((row) => row.enabled),
+      // A bundle with no live entries yet (installed but not restarted) is not
+      // "disabled" — assume enabled so it renders as "loading" instead of a
+      // misleading "off" state that could prompt an unintended disable toggle.
+      enabled: rows.length === 0 ? true : rows.every((row) => row.enabled),
       fiberPhase: aggregatePhase(rows),
     }
   }
