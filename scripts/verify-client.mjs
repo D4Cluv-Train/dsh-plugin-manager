@@ -98,6 +98,14 @@ const ctx = {
           remoteCalls.push(`installedPlugins.apply:${JSON.stringify(changes)}`)
           return { ok: true, value: { needsReload: false, names: [] } }
         },
+        discover: async () => {
+          remoteCalls.push('installedPlugins.discover')
+          return { ok: true, value: { plugins: [{ category: 'UI', name: 'owner/repo', url: 'https://github.com/owner/repo', summary: 's', spec: 'owner-repo' }] } }
+        },
+        installPlugin: async (spec) => {
+          remoteCalls.push(`installedPlugins.installPlugin:${spec}`)
+          return { ok: true, value: { needsRestart: true, name: spec } }
+        },
       }
     }
     return undefined
@@ -132,6 +140,22 @@ if (changesParam?.name !== 'changes' || changesParam?.wire !== 'changes' || chan
   throw new Error('installedPlugins/apply must declare a strict `changes` parameter codec')
 }
 
+const discoverDescriptor = mounted.flatMap(c => c.descriptors ?? []).find(d => d.namespace === 'installedPlugins' && d.method === 'discover')
+if (discoverDescriptor === undefined) throw new Error('installedPlugins/discover contribution was not mounted via ctx.remote.$mount')
+if (discoverDescriptor.result?.mode !== 'strict' || typeof discoverDescriptor.result?.schema?.parse !== 'function') {
+  throw new Error('installedPlugins/discover result codec is not strict with a parse() schema')
+}
+
+const installDescriptor = mounted.flatMap(c => c.descriptors ?? []).find(d => d.namespace === 'installedPlugins' && d.method === 'installPlugin')
+if (installDescriptor === undefined) throw new Error('installedPlugins/installPlugin contribution was not mounted via ctx.remote.$mount')
+if (installDescriptor.result?.mode !== 'strict' || typeof installDescriptor.result?.schema?.parse !== 'function') {
+  throw new Error('installedPlugins/installPlugin result codec is not strict with a parse() schema')
+}
+const installParam = installDescriptor.parameters?.[0]
+if (installParam?.name !== 'spec' || installParam?.wire !== 'spec' || installParam?.codec?.mode !== 'strict') {
+  throw new Error('installedPlugins/installPlugin must declare a strict `spec` parameter codec')
+}
+
 const registerCall = registered.find(r => r.options.name === 'sidebar.footer.action')
 if (registerCall === undefined) throw new Error('no sidebar.footer.action registration')
 if (registerCall.options.id !== 'plugin-manager') throw new Error(`unexpected action id: ${registerCall.options.id}`)
@@ -146,12 +170,21 @@ if (!remoteCalls.includes('installedPlugins.list')) throw new Error('listInstall
 if (typeof injected.applyChanges !== 'function') throw new Error('applyChanges not injected')
 await injected.applyChanges([{ name: 'dsh-plugin-manager', enabled: false }])
 if (!remoteCalls.some(call => call.startsWith('installedPlugins.apply'))) throw new Error('applyChanges did not call the mounted installedPlugins/apply service')
+if (typeof injected.discover !== 'function') throw new Error('discover not injected')
+const discovered = await injected.discover()
+if (!remoteCalls.includes('installedPlugins.discover')) throw new Error('discover did not call the mounted installedPlugins/discover service')
+if (!Array.isArray(discovered) || discovered[0]?.spec !== 'owner-repo') throw new Error('discover did not return parsed plugin entries')
+if (typeof injected.installPlugin !== 'function') throw new Error('installPlugin not injected')
+await injected.installPlugin('owner-repo')
+if (!remoteCalls.includes('installedPlugins.installPlugin:owner-repo')) throw new Error('installPlugin did not call the mounted installedPlugins/installPlugin service')
 
 console.log('verify-client: PASS')
 console.log(`  externals required: ${[...seen].join(', ')}`)
 console.log(`  inject: ${JSON.stringify(exports.inject)}`)
 console.log(`  mount: ${mountedDescriptor.namespace}/${mountedDescriptor.method} (${mountedDescriptor.result.mode})`)
 console.log(`  mount: ${applyDescriptor.namespace}/${applyDescriptor.method} (${applyDescriptor.result.mode}, param ${changesParam.wire})`)
+console.log(`  mount: ${discoverDescriptor.namespace}/${discoverDescriptor.method} (${discoverDescriptor.result.mode})`)
+console.log(`  mount: ${installDescriptor.namespace}/${installDescriptor.method} (${installDescriptor.result.mode}, param ${installParam.wire})`)
 console.log(`  registration: ${registerCall.options.name} id=${registerCall.options.id} order=${registerCall.options.order}`)
 console.log(`  remote: ${remoteCalls.join(', ')}`)
 process.exit(0)
