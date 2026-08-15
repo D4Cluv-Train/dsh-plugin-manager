@@ -244,6 +244,7 @@ const zh = {
   'status.active': '运行中',
   'status.failed': '加载失败',
   'status.loading': '加载中',
+  'status.pendingRestart': '加载中 · 待重启',
   'status.disabled': '已关闭',
   'self.note': '管理器插件不可禁用',
   'apply.applying': '正在应用…',
@@ -286,6 +287,7 @@ const en = {
   'status.active': 'Running',
   'status.failed': 'Failed',
   'status.loading': 'Loading',
+  'status.pendingRestart': 'Loading · restart pending',
   'status.disabled': 'Disabled',
   'self.note': 'The manager plugin cannot be disabled',
   'apply.applying': 'Applying…',
@@ -704,6 +706,9 @@ const CSS = `
   opacity: 0.45;
   pointer-events: none;
 }
+.dsh-pm-item--loading {
+  opacity: 0.6;
+}
 `
 
 let stylesInjected = false
@@ -832,6 +837,7 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
     if (!enabled) return 'disabled'
     if (entry.fiberPhase === 'failed') return 'failed'
     if (entry.fiberPhase === 'active') return 'active'
+    if (entry.fiberPhase === null || entry.fiberPhase === undefined) return 'pendingRestart'
     return 'loading'
   }
 
@@ -880,7 +886,7 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
                   const enabled = effectiveEnabled(entry)
                   const status = statusOf(entry, enabled)
                   return (
-                    <li key={entry.name} className={`dsh-pm-item${removed[entry.name] ? ' dsh-pm-item--removed' : ''}`}>
+                    <li key={entry.name} className={`dsh-pm-item${removed[entry.name] ? ' dsh-pm-item--removed' : (status === 'pendingRestart' ? ' dsh-pm-item--loading' : '')}`}>
                       <IconCordisPluginOutline14 size={14} />
                       <span className="dsh-pm-item-name">{entry.name}</span>
                       {removed[entry.name] ? (
