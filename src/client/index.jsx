@@ -272,6 +272,7 @@ const zh = {
   'remove.confirmTitle': '删除插件',
   'remove.confirmMessage': '确定要删除插件',
   'remove.cancel': '取消',
+  'removed.label': '已删除',
 }
 
 /** English dictionary, checked complete against the zh key set. */
@@ -313,6 +314,7 @@ const en = {
   'remove.confirmTitle': 'Remove plugin',
   'remove.confirmMessage': 'Remove plugin',
   'remove.cancel': 'Cancel',
+  'removed.label': 'Removed',
 }
 
 /**
@@ -497,7 +499,7 @@ const CSS = `
   padding: 4px 10px;
   cursor: pointer;
   background: transparent;
-  color: var(--dsw-alias-label-danger);
+  color: var(--dsw-alias-label-danger, #d92d20);
   font-family: inherit;
   font-size: 12px;
   line-height: 18px;
@@ -680,6 +682,28 @@ const CSS = `
   font-size: 14px;
   line-height: 20px;
 }
+.dsh-pm-danger-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--dsw-alias-label-danger, #d92d20);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+}
+.dsh-pm-danger-btn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.dsh-pm-danger-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.dsh-pm-item--removed {
+  opacity: 0.45;
+  pointer-events: none;
+}
 `
 
 let stylesInjected = false
@@ -722,6 +746,7 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
   const [notice, setNotice] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [removing, setRemoving] = useState(false)
+  const [removed, setRemoved] = useState({})
 
   const effectiveEnabled = (entry) =>
     Object.prototype.hasOwnProperty.call(pending, entry.name) ? pending[entry.name] : entry.enabled
@@ -733,6 +758,7 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
     setPending({})
     setApplyError(null)
     setInstallResult(null)
+    setRemoved({})
     listInstalled()
       .then(entries => { setState({ phase: 'ready', entries }) })
       .catch(error => { setState({ phase: 'error', error: String(error) }) })
@@ -769,6 +795,7 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
     uninstall(confirmDelete.name)
       .then(result => {
         setConfirmDelete(null)
+        setRemoved(prev => ({ ...prev, [result.name]: true }))
         setNotice({ kind: 'removed', name: result.name })
       })
       .catch(error => setInstallResult({ ok: false, message: String(error) }))
@@ -777,7 +804,13 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
 
   const close = () => {
     if (applying) return
-    const changes = Object.entries(pending).map(([name, enabled]) => ({ name, enabled }))
+    // Only entries whose staged toggle differs from the live state are real
+    // changes (e.g. off→on→off ends at no change) — apply/refresh only then.
+    const changes = (state.entries ?? [])
+      .filter(entry => !entry.self && !removed[entry.name]
+        && Object.prototype.hasOwnProperty.call(pending, entry.name)
+        && pending[entry.name] !== entry.enabled)
+      .map(entry => ({ name: entry.name, enabled: pending[entry.name] }))
     if (changes.length === 0) { setOpen(false); return }
     setApplying(true)
     setApplyError(null)
@@ -847,10 +880,14 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
                   const enabled = effectiveEnabled(entry)
                   const status = statusOf(entry, enabled)
                   return (
-                    <li key={entry.name} className="dsh-pm-item">
+                    <li key={entry.name} className={`dsh-pm-item${removed[entry.name] ? ' dsh-pm-item--removed' : ''}`}>
                       <IconCordisPluginOutline14 size={14} />
                       <span className="dsh-pm-item-name">{entry.name}</span>
-                      <span className={`dsh-pm-status dsh-pm-status--${status}`}>{t(`status.${status}`)}</span>
+                      {removed[entry.name] ? (
+                        <span className="dsh-pm-status dsh-pm-status--disabled">{t('removed.label')}</span>
+                      ) : (
+                        <span className={`dsh-pm-status dsh-pm-status--${status}`}>{t(`status.${status}`)}</span>
+                      )}
                       {entry.self ? (
                         <span className="dsh-pm-self-note">{t('self.note')}</span>
                       ) : (
@@ -859,13 +896,14 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
                             type="checkbox"
                             className="dsh-pm-switch"
                             checked={enabled}
+                            disabled={removed[entry.name]}
                             aria-label={entry.name}
                             onChange={event => toggle(entry.name, event.target.checked)}
                           />
                           <button
                             type="button"
                             className="dsh-pm-remove-btn"
-                            disabled={removing}
+                            disabled={removing || removed[entry.name]}
                             onClick={() => handleDeleteClick(entry.name)}
                           >
                             {t('remove')}
@@ -989,7 +1027,7 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
       >
         <p className="dsh-pm-message">{t('remove.confirmMessage')} {confirmDelete?.name}？</p>
         <div className="dsh-pm-restart-actions">
-          <button type="button" className="dsh-pm-reload" disabled={removing} onClick={handleDeleteConfirm}>{removing ? t('apply.applying') : t('remove')}</button>
+          <button type="button" className="dsh-pm-danger-btn" disabled={removing} onClick={handleDeleteConfirm}>{removing ? t('apply.applying') : t('remove')}</button>
           <button type="button" className="dsh-pm-back" disabled={removing} onClick={() => setConfirmDelete(null)}>{t('remove.cancel')}</button>
         </div>
       </Modal>
