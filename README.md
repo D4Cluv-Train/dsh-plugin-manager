@@ -1,4 +1,4 @@
-# dsh-plugin-manager
+# @d4cluvtrain/dsh-plugin-manager
 
 一个 dsh bundle 插件：在 web GUI 侧边栏添加 **"插件"** 按钮，用于查看和管理**自行安装**的插件（`dsh plugin --profile web add` 安装的 bundle，不含 dsh-base / dsh-web-app 等官方自带）。
 
@@ -14,11 +14,22 @@
 
 ## 安装
 
-- 暂未发布npm包
+已发布到 npm（[npmjs.com/@d4cluvtrain/dsh-plugin-manager](https://www.npmjs.com/package/@d4cluvtrain/dsh-plugin-manager)），一行命令安装：
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/dsh-plugin-manager
+dsh plugin --profile web add @d4cluvtrain/dsh-plugin-manager
 ```
+
+其他来源同样可用（`dsh plugin add` 转发给 pnpm，支持任意 spec）：
+
+- Git 仓库（需要仓库含 `prepare` 脚本，且 pnpm ≥10 需在 profile 的 `pnpm-workspace.yaml` 放行其构建）：
+  ```bash
+  dsh plugin --profile web add git+https://github.com/D4Cluv-Train/dsh-plugin-manager.git#main
+  ```
+- tarball / 本地路径：
+  ```bash
+  dsh plugin --profile web add /path/to/dsh-plugin-manager-0.1.0.tgz
+  ```
 
 命令会把包安装进 `~/.dsh/profiles/web/node_modules`，并追加到该 profile 的 `dsh.profile.bundles`。
 
@@ -35,7 +46,7 @@ dsh plugin --profile web add /absolute/path/to/dsh-plugin-manager
 ## 移除
 
 ```bash
-dsh plugin --profile web remove dsh-plugin-manager
+dsh plugin --profile web remove @d4cluvtrain/dsh-plugin-manager
 ```
 
 卸载会从依赖与 `dsh.profile.bundles` 中移除，重启 dsh web 后不再挂载。

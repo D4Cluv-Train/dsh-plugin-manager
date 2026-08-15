@@ -1,8 +1,11 @@
 {
-  "name": "dsh-plugin-manager",
+  "name": "@d4cluvtrain/dsh-plugin-manager",
   "version": "0.1.0",
   "description": "MVP dsh bundle plugin: proves it loaded by registering a /plugin-manager web route, logging, writing a marker file, and adding a sidebar '插件' button whose modal lists the user-installed plugins",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./lib/plugin.mjs",
   "exports": {
     ".": "./lib/plugin.mjs",
@@ -18,10 +21,14 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:client": "node scripts/build.mjs",
-    "verify:client": "node scripts/verify-client.mjs"
+    "verify:client": "node scripts/verify-client.mjs",
+    "prepare": "node scripts/build.mjs"
   },
-  "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/D4Cluv-Train/dsh-plugin-manager.git"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

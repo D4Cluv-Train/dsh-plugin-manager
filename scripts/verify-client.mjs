@@ -39,7 +39,7 @@ globalThis.window = {
 // 2. execute the bundle (new Function: runs in global scope, sees window)
 new Function(readFileSync(bundlePath, 'utf8'))()
 if (captured === undefined) throw new Error('bundle did not register via __ModuleLoader__.load')
-if (captured.id !== 'dsh-plugin-manager') throw new Error(`unexpected bundle id: ${captured.id}`)
+if (captured.id !== '@d4cluvtrain/dsh-plugin-manager') throw new Error(`unexpected bundle id: ${captured.id}`)
 
 // 3. materialize with a module-table-mirroring require
 // Anchor at a package that depends on react (the checkout root does not).
@@ -92,7 +92,7 @@ const ctx = {
       return {
         list: async () => {
           remoteCalls.push('installedPlugins.list')
-          return { ok: true, value: { entries: [{ name: 'dsh-plugin-manager', enabled: true, fiberPhase: 'active', self: true }] } }
+          return { ok: true, value: { entries: [{ name: '@d4cluvtrain/dsh-plugin-manager', enabled: true, fiberPhase: 'active', self: true }] } }
         },
         apply: async (changes) => {
           remoteCalls.push(`installedPlugins.apply:${JSON.stringify(changes)}`)
@@ -182,7 +182,7 @@ if (typeof injected.listInstalled !== 'function') throw new Error('listInstalled
 await injected.listInstalled()
 if (!remoteCalls.includes('installedPlugins.list')) throw new Error('listInstalled did not call the mounted installedPlugins service')
 if (typeof injected.applyChanges !== 'function') throw new Error('applyChanges not injected')
-await injected.applyChanges([{ name: 'dsh-plugin-manager', enabled: false }])
+await injected.applyChanges([{ name: '@d4cluvtrain/dsh-plugin-manager', enabled: false }])
 if (!remoteCalls.some(call => call.startsWith('installedPlugins.apply'))) throw new Error('applyChanges did not call the mounted installedPlugins/apply service')
 if (typeof injected.discover !== 'function') throw new Error('discover not injected')
 const discovered = await injected.discover()

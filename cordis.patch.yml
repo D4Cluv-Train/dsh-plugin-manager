@@ -1,4 +1,4 @@
-# dsh-plugin-manager bundle patch: entries inserted into the profile tree.
+# @d4cluvtrain/dsh-plugin-manager bundle patch: entries inserted into the profile tree.
 # `dsh.bundle.patch` in package.json points here. The composed profile applies
 # this insert over the empty profile root (after @deepseek-ai/dsh-base, before
 # the profile's own cordis.patch.yml).
@@ -11,6 +11,6 @@
 #                         bundles.
 - insert:
     - id: plugin-manager
-      name: dsh-plugin-manager
+      name: '@d4cluvtrain/dsh-plugin-manager'
     - id: plugin-manager-installed
-      name: dsh-plugin-manager/installed-plugins
+      name: '@d4cluvtrain/dsh-plugin-manager/installed-plugins'

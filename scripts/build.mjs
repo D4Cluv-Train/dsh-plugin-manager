@@ -1,12 +1,12 @@
 /**
- * Build the dsh bundles for dsh-plugin-manager: the browser client bundle and
+ * Build the dsh bundles for @d4cluvtrain/dsh-plugin-manager: the browser client bundle and
  * the host remote-service module.
  *
  * Client bundle (`lib/client.js`) uses the dsh client-bundle format — the same
  * shape the in-repo `tsdown.client.ts` preset produces:
  *
  *   window.__ModuleLoader__.load({
- *     id: "dsh-plugin-manager",
+ *     id: "@d4cluvtrain/dsh-plugin-manager",
  *     factory: (require) => { var module = { exports: {} }; ... return module.exports; }
  *   });
  *
@@ -70,7 +70,7 @@ await build({
 const body = readFileSync(clientTmp, 'utf8')
 const wrapped = [
   'window.__ModuleLoader__.load({',
-  '\tid: "dsh-plugin-manager",',
+  '\tid: "@d4cluvtrain/dsh-plugin-manager",',
   '\tfactory: (require) => {',
   '\t\tvar module = { exports: {} };',
   '\t\tvar exports = module.exports;',
