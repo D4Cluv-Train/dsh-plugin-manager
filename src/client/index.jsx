@@ -340,7 +340,7 @@ const CSS = `
 .dsh-pm-tabs {
   display: flex;
   gap: 4px;
-  margin: 0;
+  margin: 0 0 20px;
   padding: 0 0 12px;
   border-bottom: 1px solid var(--dsw-alias-border-inverted);
 }
