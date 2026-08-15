@@ -239,6 +239,9 @@ const zh = {
   'discover.install': '安装',
   'discover.installing': '安装中…',
   'discover.installed': '安装成功',
+  'discover.back': '返回列表',
+  'discover.about': '简介',
+  'discover.noSummary': '暂无简介',
   'install.restart': '安装成功，需重启 dsh（或刷新页面）后生效',
   'install.failed': '安装失败',
 }
@@ -270,6 +273,9 @@ const en = {
   'discover.install': 'Install',
   'discover.installing': 'Installing…',
   'discover.installed': 'Installed',
+  'discover.back': 'Back',
+  'discover.about': 'About',
+  'discover.noSummary': 'No description',
   'install.restart': 'Installed; needs a dsh restart (or page reload) to take effect',
   'install.failed': 'Install failed',
 }
@@ -318,44 +324,113 @@ const CSS = `
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
-.dsh-pm-discover-item {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-}
-.dsh-pm-discover-head {
-  display: flex;
-  align-items: center;
+.dsh-pm-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
-.dsh-pm-discover-name {
-  flex: none;
-  font-weight: 500;
+.dsh-pm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-inverted);
+  border-radius: 12px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  cursor: pointer;
+  overflow: hidden;
 }
-.dsh-pm-discover-url {
-  flex: 1;
-  min-width: 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  line-height: 18px;
+.dsh-pm-card:hover {
+  border-color: var(--dsw-alias-accent, #4d6bfe);
+}
+.dsh-pm-card-name {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
   text-decoration: none;
   word-break: break-all;
 }
-.dsh-pm-discover-url:hover {
+.dsh-pm-card-name:hover {
   text-decoration: underline;
-  color: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-accent, #4d6bfe);
 }
-.dsh-pm-discover-summary {
+.dsh-pm-card-summary {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.dsh-pm-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dsh-pm-back {
+  align-self: flex-start;
+  border: none;
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 18px;
+}
+.dsh-pm-back:hover {
+  background: var(--dsw-alias-bg-fill-2);
+}
+.dsh-pm-detail-name {
+  color: var(--dsw-alias-label-primary);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  text-decoration: none;
+  word-break: break-all;
+}
+.dsh-pm-detail-name:hover {
+  text-decoration: underline;
+  color: var(--dsw-alias-accent, #4d6bfe);
+}
+.dsh-pm-detail-url {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  word-break: break-all;
+}
+.dsh-pm-detail-about {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dsh-pm-detail-label {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+.dsh-pm-detail-summary {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   line-height: 20px;
+  word-break: break-word;
 }
-.dsh-pm-discover-actions {
+.dsh-pm-detail-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-top: 4px;
 }
 .dsh-pm-discover-command {
   color: var(--dsw-alias-label-tertiary);
@@ -589,6 +664,7 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
   const [discoverState, setDiscoverState] = useState({ phase: 'idle' })
   const [installingSpec, setInstallingSpec] = useState(null)
   const [installResult, setInstallResult] = useState(null)
+  const [selectedPlugin, setSelectedPlugin] = useState(null)
 
   const effectiveEnabled = (entry) =>
     Object.prototype.hasOwnProperty.call(pending, entry.name) ? pending[entry.name] : entry.enabled
@@ -729,35 +805,61 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
             )}
             {discoverState.phase === 'ready' && (discoverState.plugins.length === 0 ? (
               <p className="dsh-pm-message">{t('discover.empty')}</p>
-            ) : (
-              <ul className="dsh-pm-list">
+            ) : selectedPlugin === null ? (
+              <ul className="dsh-pm-grid">
                 {discoverState.plugins.map(plugin => (
-                  <li key={plugin.url} className="dsh-pm-item dsh-pm-discover-item">
-                    <div className="dsh-pm-discover-head">
-                      <IconCordisPluginOutline14 size={14} />
-                      <span className="dsh-pm-discover-name">{plugin.name}</span>
-                      <a className="dsh-pm-discover-url" href={plugin.url} target="_blank" rel="noreferrer">{plugin.url}</a>
-                    </div>
-                    {plugin.summary !== '' && <p className="dsh-pm-discover-summary">{plugin.summary}</p>}
-                    <div className="dsh-pm-discover-actions">
-                      <span className="dsh-pm-discover-command">dsh plugin --profile web add {plugin.spec}</span>
-                      <button
-                        type="button"
-                        className="dsh-pm-install-btn"
-                        disabled={installingSpec === plugin.spec}
-                        onClick={() => handleInstall(plugin.spec)}
-                      >
-                        {installingSpec === plugin.spec ? t('discover.installing') : t('discover.install')}
-                      </button>
-                    </div>
+                  <li
+                    key={plugin.url}
+                    className="dsh-pm-card"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedPlugin(plugin)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setSelectedPlugin(plugin)
+                      }
+                    }}
+                  >
+                    <a
+                      className="dsh-pm-card-name"
+                      href={plugin.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={event => event.stopPropagation()}
+                    >
+                      {plugin.name}
+                    </a>
+                    {plugin.summary !== '' && <p className="dsh-pm-card-summary">{plugin.summary}</p>}
                   </li>
                 ))}
               </ul>
-            ))}
-            {installResult !== null && (installResult.ok ? (
-              <p className="dsh-pm-message">{installResult.needsRestart ? `${t('install.restart')}: ${installResult.name}` : `${t('discover.installed')}: ${installResult.name}`}</p>
             ) : (
-              <p className="dsh-pm-error">{t('install.failed')}: {installResult.message}</p>
+              <div className="dsh-pm-detail">
+                <button type="button" className="dsh-pm-back" onClick={() => setSelectedPlugin(null)}>{t('discover.back')}</button>
+                <a className="dsh-pm-detail-name" href={selectedPlugin.url} target="_blank" rel="noreferrer">{selectedPlugin.name}</a>
+                <p className="dsh-pm-detail-url">{selectedPlugin.url}</p>
+                <div className="dsh-pm-detail-about">
+                  <span className="dsh-pm-detail-label">{t('discover.about')}</span>
+                  <p className="dsh-pm-detail-summary">{selectedPlugin.summary || t('discover.noSummary')}</p>
+                </div>
+                <div className="dsh-pm-detail-actions">
+                  <span className="dsh-pm-discover-command">dsh plugin --profile web add {selectedPlugin.spec}</span>
+                  <button
+                    type="button"
+                    className="dsh-pm-install-btn"
+                    disabled={installingSpec === selectedPlugin.spec}
+                    onClick={() => handleInstall(selectedPlugin.spec)}
+                  >
+                    {installingSpec === selectedPlugin.spec ? t('discover.installing') : t('discover.install')}
+                  </button>
+                </div>
+                {installResult !== null && (installResult.ok ? (
+                  <p className="dsh-pm-message">{installResult.needsRestart ? `${t('install.restart')}: ${installResult.name}` : `${t('discover.installed')}: ${installResult.name}`}</p>
+                ) : (
+                  <p className="dsh-pm-error">{t('install.failed')}: {installResult.message}</p>
+                ))}
+              </div>
             ))}
           </>
         )}
