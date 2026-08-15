@@ -24,8 +24,9 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { applyEnabledChanges, readPatchRows } from './plugin-patches.js'
@@ -428,6 +429,50 @@ export class InstalledPluginsGateway extends TypertRemoteService {
       }
     }
     return null
+  }
+
+  /**
+   * Restart the dsh service so a freshly installed bundle is picked up at boot.
+   * Spawns a detached helper process that, after a short delay (so the RPC
+   * response reaches the browser), terminates this process and relaunches it
+   * with the same node binary / argv / cwd / env. Returns before the process
+   * goes down; the caller shows a "restarting" state.
+   * @returns `{ ok: true }`.
+   */
+  @Remote('restart')
+  async restart() {
+    const nodePath = process.execPath
+    const args = process.argv.slice(1)
+    if (args.length === 0) throw new Error('restart: cannot determine launch command')
+    const cwd = process.cwd()
+    const parentPid = process.pid
+    // A CommonJS helper (written to a temp file) so it survives the parent's
+    // death: kill the parent, poll until it is gone (port released), then spawn
+    // the same command detached.
+    const helper = [
+      "const { spawn } = require('node:child_process');",
+      `const node = ${JSON.stringify(nodePath)};`,
+      `const args = ${JSON.stringify(args)};`,
+      `const cwd = ${JSON.stringify(cwd)};`,
+      `const pid = ${parentPid};`,
+      "setTimeout(() => {",
+      "  try { process.kill(pid, 'SIGTERM') } catch {}",
+      "  const trySpawn = () => {",
+      "    try { process.kill(pid, 0) } catch {",
+      "      const child = spawn(node, args, { cwd, env: process.env, detached: true, stdio: 'ignore' });",
+      "      child.unref();",
+      "      return;",
+      "    }",
+      "    setTimeout(trySpawn, 500);",
+      "  };",
+      "  setTimeout(trySpawn, 500);",
+      "}, 1500);",
+    ].join('\n')
+    const helperPath = join(tmpdir(), `dsh-restart-${parentPid}.cjs`)
+    writeFileSync(helperPath, helper)
+    const child = spawn(nodePath, [helperPath], { cwd, detached: true, stdio: 'ignore' })
+    child.unref()
+    return { ok: true }
   }
 }
 
