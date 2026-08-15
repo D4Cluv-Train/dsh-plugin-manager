@@ -24,9 +24,8 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { applyEnabledChanges, readPatchRows } from './plugin-patches.js'
@@ -432,47 +431,36 @@ export class InstalledPluginsGateway extends TypertRemoteService {
   }
 
   /**
-   * Restart the dsh service so a freshly installed bundle is picked up at boot.
-   * Spawns a detached helper process that, after a short delay (so the RPC
-   * response reaches the browser), terminates this process and relaunches it
-   * with the same node binary / argv / cwd / env. Returns before the process
-   * goes down; the caller shows a "restarting" state.
-   * @returns `{ ok: true }`.
+   * Remove a plugin from the profile (pnpm remove + drop it from
+   * `dsh.profile.bundles`, cleaning up any managed disabled rows it left in
+   * the profile patch). The new bundle set is applied at boot, so a restart is
+   * required for the removal to fully take effect.
+   * @param spec - the installed package name to remove.
+   * @returns `{ needsRestart, name }`.
    */
-  @Remote('restart')
-  async restart() {
-    const nodePath = process.execPath
-    const args = process.argv.slice(1)
-    if (args.length === 0) throw new Error('restart: cannot determine launch command')
-    const cwd = process.cwd()
-    const parentPid = process.pid
-    // A CommonJS helper (written to a temp file) so it survives the parent's
-    // death: kill the parent, poll until it is gone (port released), then spawn
-    // the same command detached.
-    const helper = [
-      "const { spawn } = require('node:child_process');",
-      `const node = ${JSON.stringify(nodePath)};`,
-      `const args = ${JSON.stringify(args)};`,
-      `const cwd = ${JSON.stringify(cwd)};`,
-      `const pid = ${parentPid};`,
-      "setTimeout(() => {",
-      "  try { process.kill(pid, 'SIGTERM') } catch {}",
-      "  const trySpawn = () => {",
-      "    try { process.kill(pid, 0) } catch {",
-      "      const child = spawn(node, args, { cwd, env: process.env, detached: true, stdio: 'ignore' });",
-      "      child.unref();",
-      "      return;",
-      "    }",
-      "    setTimeout(trySpawn, 500);",
-      "  };",
-      "  setTimeout(trySpawn, 500);",
-      "}, 1500);",
-    ].join('\n')
-    const helperPath = join(tmpdir(), `dsh-restart-${parentPid}.cjs`)
-    writeFileSync(helperPath, helper)
-    const child = spawn(nodePath, [helperPath], { cwd, detached: true, stdio: 'ignore' })
-    child.unref()
-    return { ok: true }
+  @Remote('uninstall')
+  async uninstall(spec) {
+    if (typeof spec !== 'string' || spec === '' || spec.startsWith('-')) {
+      throw new Error('uninstall: invalid package name')
+    }
+    const profileDir = fileURLToPath(this.ctx.baseUrl)
+    const result = runPnpm(profileDir, ['remove', spec])
+    if (!result.ok) throw new Error(`uninstall: ${spec} 卸载失败 (${result.detail})`)
+    // Drop the package from the bundle layer stack.
+    const manifestPath = join(profileDir, 'package.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    const bundles = manifest.dsh?.profile?.bundles ?? []
+    const next = bundles.filter(name => name !== spec)
+    if (next.length !== bundles.length) {
+      manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles: next } }
+      writeFileSync(manifestPath, JSON.stringify(manifest, undefined, 2) + '\n')
+    }
+    // Clean up managed disabled rows for the removed package's entries.
+    const { ids } = await this.entryIdsFor(profileDir, spec)
+    if (ids.length > 0) {
+      await applyEnabledChanges(join(profileDir, 'cordis.patch.yml'), new Map(ids.map(id => [id, false])))
+    }
+    return { needsRestart: true, name: spec }
   }
 }
 

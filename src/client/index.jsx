@@ -134,16 +134,6 @@ const installResultSchema = {
   },
 }
 
-/** Strict codec for installedPlugins/restart result: `{ ok }`. */
-const restartResultSchema = {
-  parse(value) {
-    if (value === null || typeof value !== 'object') {
-      throw new TypeError('installedPlugins/restart result must be an object')
-    }
-    return { ok: Boolean(value.ok) }
-  },
-}
-
 /**
  * The client-side Typert Remote contribution that materializes the
  * `remote.installedPlugins` namespace. It mirrors the host binding
@@ -220,16 +210,25 @@ const INSTALLED_PLUGINS_REMOTE = {
       schema: installResultSchema,
     },
   }, {
-    id: 'dsh-plugin-manager#installedPlugins/restart',
+    id: 'dsh-plugin-manager#installedPlugins/uninstall',
     service: 'installedPlugins',
     namespace: 'installedPlugins',
-    method: 'restart',
+    method: 'uninstall',
     invocation: { kind: 'direct' },
-    parameters: [],
+    parameters: [{
+      name: 'spec',
+      wire: 'spec',
+      source: 'json',
+      codec: {
+        mode: 'strict',
+        typeSymbol: 'dsh-plugin-manager#InstalledPluginsUninstallSpec',
+        schema: installSpecSchema,
+      },
+    }],
     result: {
       mode: 'strict',
-      typeSymbol: 'dsh-plugin-manager#InstalledPluginsRestartResult',
-      schema: restartResultSchema,
+      typeSymbol: 'dsh-plugin-manager#InstalledPluginsUninstallResult',
+      schema: installResultSchema,
     },
   }],
 }
@@ -266,11 +265,13 @@ const zh = {
   'discover.noSummary': '暂无简介',
   'install.restart': '安装成功，需重启 dsh（或刷新页面）后生效',
   'install.failed': '安装失败',
-  'restart.confirmTitle': '重启 dsh',
-  'restart.confirmMessage': '插件已安装，需要重启 dsh 才能生效。是否立即重启？',
-  'restart.now': '立即重启',
-  'restart.later': '稍后',
-  'restart.restarting': '正在重启 dsh…完成后请刷新页面',
+  'notice.installed': '插件已安装，需要重启 dsh 才能生效',
+  'notice.removed': '插件已删除，需要重启 dsh 才能生效',
+  'notice.ok': '知道了',
+  'remove': '删除',
+  'remove.confirmTitle': '删除插件',
+  'remove.confirmMessage': '确定要删除插件',
+  'remove.cancel': '取消',
 }
 
 /** English dictionary, checked complete against the zh key set. */
@@ -305,11 +306,13 @@ const en = {
   'discover.noSummary': 'No description',
   'install.restart': 'Installed; needs a dsh restart (or page reload) to take effect',
   'install.failed': 'Install failed',
-  'restart.confirmTitle': 'Restart dsh',
-  'restart.confirmMessage': 'The plugin is installed and needs a dsh restart to take effect. Restart now?',
-  'restart.now': 'Restart now',
-  'restart.later': 'Later',
-  'restart.restarting': 'Restarting dsh… please refresh after it comes back',
+  'notice.installed': 'The plugin is installed and needs a dsh restart to take effect',
+  'notice.removed': 'The plugin is removed and needs a dsh restart to take effect',
+  'notice.ok': 'Got it',
+  'remove': 'Remove',
+  'remove.confirmTitle': 'Remove plugin',
+  'remove.confirmMessage': 'Remove plugin',
+  'remove.cancel': 'Cancel',
 }
 
 /**
@@ -484,6 +487,25 @@ const CSS = `
   line-height: 18px;
 }
 .dsh-pm-install-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.dsh-pm-remove-btn {
+  flex: none;
+  border: none;
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--dsw-alias-label-danger);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 18px;
+}
+.dsh-pm-remove-btn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.dsh-pm-remove-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -681,9 +703,9 @@ function ensureStyles() {
  * registry with one-click install.
  * @param props - `{ wide }` owner share from the sidebar shell, the locale
  * seat, and the `listInstalled`/`applyChanges`/`discover`/`installPlugin`/
- * `restart` business faces injected at registration.
+ * `uninstall` business faces injected at registration.
  */
-function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, installPlugin, restart: restartService }) {
+function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, installPlugin, uninstall }) {
   const [open, setOpen] = useState(false)
   // installed tab: phase 'idle' | 'loading' | 'ready' | 'error'
   const [state, setState] = useState({ phase: 'idle' })
@@ -697,8 +719,9 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
   const [installingSpec, setInstallingSpec] = useState(null)
   const [installResult, setInstallResult] = useState(null)
   const [selectedPlugin, setSelectedPlugin] = useState(null)
-  const [confirmRestart, setConfirmRestart] = useState(null)
-  const [restarting, setRestarting] = useState(false)
+  const [notice, setNotice] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [removing, setRemoving] = useState(false)
 
   const effectiveEnabled = (entry) =>
     Object.prototype.hasOwnProperty.call(pending, entry.name) ? pending[entry.name] : entry.enabled
@@ -730,18 +753,26 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
     installPlugin(spec)
       .then(result => {
         setInstallResult({ ok: true, name: result.name })
-        setConfirmRestart({ name: result.name })
+        setNotice({ kind: 'installed', name: result.name })
       })
       .catch(error => setInstallResult({ ok: false, message: String(error) }))
       .finally(() => { setInstallingSpec(null) })
   }
 
-  const handleRestartService = () => {
-    setConfirmRestart(null)
-    setRestarting(true)
-    restartService()
+  const handleDeleteClick = (name) => {
+    setConfirmDelete({ name })
+  }
+
+  const handleDeleteConfirm = () => {
+    if (confirmDelete === null || removing) return
+    setRemoving(true)
+    uninstall(confirmDelete.name)
+      .then(result => {
+        setConfirmDelete(null)
+        setNotice({ kind: 'removed', name: result.name })
+      })
       .catch(error => setInstallResult({ ok: false, message: String(error) }))
-      .finally(() => { setRestarting(false) })
+      .finally(() => { setRemoving(false) })
   }
 
   const close = () => {
@@ -823,13 +854,23 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
                       {entry.self ? (
                         <span className="dsh-pm-self-note">{t('self.note')}</span>
                       ) : (
-                        <input
-                          type="checkbox"
-                          className="dsh-pm-switch"
-                          checked={enabled}
-                          aria-label={entry.name}
-                          onChange={event => toggle(entry.name, event.target.checked)}
-                        />
+                        <>
+                          <input
+                            type="checkbox"
+                            className="dsh-pm-switch"
+                            checked={enabled}
+                            aria-label={entry.name}
+                            onChange={event => toggle(entry.name, event.target.checked)}
+                          />
+                          <button
+                            type="button"
+                            className="dsh-pm-remove-btn"
+                            disabled={removing}
+                            onClick={() => handleDeleteClick(entry.name)}
+                          >
+                            {t('remove')}
+                          </button>
+                        </>
                       )}
                     </li>
                   )
@@ -930,22 +971,27 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
         </div>
       </Modal>
       <Modal
-        open={confirmRestart !== null || restarting}
-        onClose={() => { if (!restarting) setConfirmRestart(null) }}
-        title={t('restart.confirmTitle')}
+        open={notice !== null}
+        onClose={() => setNotice(null)}
+        title={t('dialog.title')}
         closeLabel={t('close')}
       >
-        {restarting ? (
-          <p className="dsh-pm-message">{t('restart.restarting')}</p>
-        ) : (
-          <>
-            <p className="dsh-pm-message">{t('restart.confirmMessage')}: {confirmRestart?.name}</p>
-            <div className="dsh-pm-restart-actions">
-              <button type="button" className="dsh-pm-reload" onClick={handleRestartService}>{t('restart.now')}</button>
-              <button type="button" className="dsh-pm-back" onClick={() => setConfirmRestart(null)}>{t('restart.later')}</button>
-            </div>
-          </>
-        )}
+        <p className="dsh-pm-message">{t(notice?.kind === 'installed' ? 'notice.installed' : 'notice.removed')}: {notice?.name}</p>
+        <div className="dsh-pm-restart-actions">
+          <button type="button" className="dsh-pm-reload" onClick={() => setNotice(null)}>{t('notice.ok')}</button>
+        </div>
+      </Modal>
+      <Modal
+        open={confirmDelete !== null}
+        onClose={() => { if (!removing) setConfirmDelete(null) }}
+        title={t('remove.confirmTitle')}
+        closeLabel={t('close')}
+      >
+        <p className="dsh-pm-message">{t('remove.confirmMessage')} {confirmDelete?.name}？</p>
+        <div className="dsh-pm-restart-actions">
+          <button type="button" className="dsh-pm-reload" disabled={removing} onClick={handleDeleteConfirm}>{removing ? t('apply.applying') : t('remove')}</button>
+          <button type="button" className="dsh-pm-back" disabled={removing} onClick={() => setConfirmDelete(null)}>{t('remove.cancel')}</button>
+        </div>
       </Modal>
     </>
   )
@@ -1006,10 +1052,10 @@ export async function apply(ctx) {
       }
       return result.value
     },
-    restart: async () => {
-      const result = await installedPlugins.restart()
+    uninstall: async (spec) => {
+      const result = await installedPlugins.uninstall(spec)
       if (!result.ok) {
-        throw new Error(`installedPlugins.restart failed: ${result.error.code}: ${result.error.message}`)
+        throw new Error(`installedPlugins.uninstall failed: ${result.error.code}: ${result.error.message}`)
       }
       return result.value
     },

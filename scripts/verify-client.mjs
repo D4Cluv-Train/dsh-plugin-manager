@@ -106,9 +106,9 @@ const ctx = {
           remoteCalls.push(`installedPlugins.installPlugin:${spec}`)
           return { ok: true, value: { needsRestart: true, name: spec } }
         },
-        restart: async () => {
-          remoteCalls.push('installedPlugins.restart')
-          return { ok: true, value: { ok: true } }
+        uninstall: async (spec) => {
+          remoteCalls.push(`installedPlugins.uninstall:${spec}`)
+          return { ok: true, value: { needsRestart: true, name: spec } }
         },
       }
     }
@@ -160,10 +160,14 @@ if (installParam?.name !== 'spec' || installParam?.wire !== 'spec' || installPar
   throw new Error('installedPlugins/installPlugin must declare a strict `spec` parameter codec')
 }
 
-const restartDescriptor = mounted.flatMap(c => c.descriptors ?? []).find(d => d.namespace === 'installedPlugins' && d.method === 'restart')
-if (restartDescriptor === undefined) throw new Error('installedPlugins/restart contribution was not mounted via ctx.remote.$mount')
+const restartDescriptor = mounted.flatMap(c => c.descriptors ?? []).find(d => d.namespace === 'installedPlugins' && d.method === 'uninstall')
+if (restartDescriptor === undefined) throw new Error('installedPlugins/uninstall contribution was not mounted via ctx.remote.$mount')
 if (restartDescriptor.result?.mode !== 'strict' || typeof restartDescriptor.result?.schema?.parse !== 'function') {
-  throw new Error('installedPlugins/restart result codec is not strict with a parse() schema')
+  throw new Error('installedPlugins/uninstall result codec is not strict with a parse() schema')
+}
+const uninstallParam = restartDescriptor.parameters?.[0]
+if (uninstallParam?.name !== 'spec' || uninstallParam?.wire !== 'spec' || uninstallParam?.codec?.mode !== 'strict') {
+  throw new Error('installedPlugins/uninstall must declare a strict `spec` parameter codec')
 }
 
 const registerCall = registered.find(r => r.options.name === 'sidebar.footer.action')
@@ -187,9 +191,9 @@ if (!Array.isArray(discovered) || discovered[0]?.spec !== 'owner-repo') throw ne
 if (typeof injected.installPlugin !== 'function') throw new Error('installPlugin not injected')
 await injected.installPlugin('owner-repo')
 if (!remoteCalls.includes('installedPlugins.installPlugin:owner-repo')) throw new Error('installPlugin did not call the mounted installedPlugins/installPlugin service')
-if (typeof injected.restart !== 'function') throw new Error('restart not injected')
-await injected.restart()
-if (!remoteCalls.includes('installedPlugins.restart')) throw new Error('restart did not call the mounted installedPlugins/restart service')
+if (typeof injected.uninstall !== 'function') throw new Error('uninstall not injected')
+await injected.uninstall('owner-repo')
+if (!remoteCalls.includes('installedPlugins.uninstall:owner-repo')) throw new Error('uninstall did not call the mounted installedPlugins/uninstall service')
 
 console.log('verify-client: PASS')
 console.log(`  externals required: ${[...seen].join(', ')}`)
@@ -198,7 +202,7 @@ console.log(`  mount: ${mountedDescriptor.namespace}/${mountedDescriptor.method}
 console.log(`  mount: ${applyDescriptor.namespace}/${applyDescriptor.method} (${applyDescriptor.result.mode}, param ${changesParam.wire})`)
 console.log(`  mount: ${discoverDescriptor.namespace}/${discoverDescriptor.method} (${discoverDescriptor.result.mode})`)
 console.log(`  mount: ${installDescriptor.namespace}/${installDescriptor.method} (${installDescriptor.result.mode}, param ${installParam.wire})`)
-console.log(`  mount: ${restartDescriptor.namespace}/${restartDescriptor.method} (${restartDescriptor.result.mode})`)
+console.log(`  mount: ${restartDescriptor.namespace}/${restartDescriptor.method} (${restartDescriptor.result.mode}, param ${uninstallParam.wire})`)
 console.log(`  registration: ${registerCall.options.name} id=${registerCall.options.id} order=${registerCall.options.order}`)
 console.log(`  remote: ${remoteCalls.join(', ')}`)
 process.exit(0)
