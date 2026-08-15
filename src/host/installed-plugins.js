@@ -35,9 +35,34 @@ export const name = 'installed-plugins'
 /** This bundle's package name — the manager must never disable itself. */
 const SELF_PACKAGE = 'dsh-plugin-manager'
 
-/** awesome-dsh-plugin data sources for the discover tab. */
+/** awesome-dsh-plugin data source for the discover tab (its README lists every plugin). */
 const AWESOME_README_URL = 'https://raw.githubusercontent.com/awesome-dsh-plugin/awesome-dsh-plugin/main/README.md'
-const AWESOME_NPM_MAP_URL = 'https://raw.githubusercontent.com/awesome-dsh-plugin/awesome-dsh-plugin/main/data/npm-map.json'
+
+/**
+ * Fetch with a bounded timeout and retries on transient network failures. The
+ * global fetch (undici) is used — `node:https` connections hang in this
+ * environment, while undici succeeds (verified empirically). A single failed
+ * fetch must not fail the whole discover tab.
+ * @param url - URL to fetch.
+ * @param retries - extra attempts after the first.
+ * @param delayMs - base delay between retries (backed off linearly).
+ * @returns the Response of the first successful attempt.
+ */
+async function fetchWithRetry(url, retries = 3, delayMs = 400) {
+  let lastError
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fetch(url, { signal: AbortSignal.timeout(8_000) })
+    } catch (error) {
+      lastError = error
+      if (attempt < retries) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)))
+      }
+    }
+  }
+  const cause = lastError?.cause?.code ?? lastError?.cause?.message ?? lastError?.message ?? String(lastError)
+  throw new Error(`discover: failed to fetch ${url} (${cause})`)
+}
 
 /** Cordis FiberState → phase string mirror (see plugin-inventory). */
 const FIBER_PHASE = {
@@ -91,13 +116,13 @@ function collectContributed(patches, ids, modules) {
 /**
  * Parse the awesome-dsh-plugin README plugin list into discover entries. Each
  * `- [owner/repo](url) - summary` row under a `### category` heading becomes
- * one entry; the install spec is the npm package name from `npm-map.json` when
- * the plugin ships on npm, else the git repo URL.
+ * one entry. The install spec is the repo's git URL — the actual npm package
+ * name is resolved lazily at install time (the awesome repo no longer ships a
+ * name→package map), so the list stays current without a volatile data file.
  * @param readme - raw README.md text of the awesome repo.
- * @param npmMap - parsed `data/npm-map.json` (repo URL → `{ npm }`).
  * @returns `{ category, name, url, summary, spec }[]`.
  */
-function parseAwesomePlugins(readme, npmMap) {
+function parseAwesomePlugins(readme) {
   const plugins = []
   let category = ''
   let inPlugins = false
@@ -116,9 +141,7 @@ function parseAwesomePlugins(readme, npmMap) {
     if (entry === null) continue
     const name = entry[1].split('#')[0]
     const summary = (entry[3] ?? '').trim()
-    const repoUrl = `https://github.com/${name}`
-    const spec = npmMap[repoUrl]?.npm ?? repoUrl
-    plugins.push({ category, name, url: entry[2], summary, spec })
+    plugins.push({ category, name, url: entry[2], summary, spec: `https://github.com/${name}` })
   }
   return plugins
 }
@@ -156,6 +179,33 @@ function reconcileBundles(profileDir) {
     manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } }
     writeFileSync(manifestPath, JSON.stringify(manifest, undefined, 2) + '\n')
   }
+}
+
+/** Extract `owner/repo` from a GitHub URL or plain repo spec; null otherwise. */
+function githubRepoInfo(spec) {
+  const match = String(spec).trim().match(/^(?:https:\/\/github\.com\/)?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?$/)
+  return match === null ? null : match[1]
+}
+
+/**
+ * Run pnpm once in the profile directory. Returns `{ ok, detail }` — detail is
+ * the truncated output on failure (or an error description when pnpm is missing).
+ */
+function runPnpm(profileDir, args) {
+  const result = spawnSync('pnpm', args, {
+    cwd: profileDir,
+    stdio: 'pipe',
+    shell: process.platform === 'win32',
+  })
+  if (result.error !== undefined) {
+    const detail = result.error.code === 'ENOENT' ? 'pnpm not found on PATH' : String(result.error)
+    return { ok: false, detail }
+  }
+  if (result.status !== 0) {
+    const detail = String(result.stderr ?? result.stdout ?? '').slice(0, 500)
+    return { ok: false, detail: detail === '' ? `exit ${result.status}` : detail }
+  }
+  return { ok: true, detail: '' }
 }
 
 /** One self-installed profile bundle (live status included). */
@@ -310,51 +360,71 @@ export class InstalledPluginsGateway extends TypertRemoteService {
 
   /**
    * List plugins from the awesome-dsh-plugin registry (name / summary / source
-   * / install spec). Fetched live from GitHub on every call.
+   * / install spec). The README is fetched live; the spec is the git repo URL,
+   * resolved to the real npm package at install time.
    * @returns `{ plugins }` where each plugin is `{ category, name, url, summary, spec }`.
    */
   @Remote('discover')
   async discover() {
-    const [readmeText, npmMap] = await Promise.all([
-      fetch(AWESOME_README_URL).then((res) => {
-        if (!res.ok) throw new Error(`discover: ${AWESOME_README_URL} returned ${res.status}`)
-        return res.text()
-      }),
-      fetch(AWESOME_NPM_MAP_URL).then((res) => {
-        if (!res.ok) throw new Error(`discover: ${AWESOME_NPM_MAP_URL} returned ${res.status}`)
-        return res.json()
-      }),
-    ])
-    return { plugins: parseAwesomePlugins(readmeText, npmMap) }
+    const readmeText = await fetchWithRetry(AWESOME_README_URL).then((res) => {
+      if (!res.ok) throw new Error(`discover: ${AWESOME_README_URL} returned ${res.status}`)
+      return res.text()
+    })
+    return { plugins: parseAwesomePlugins(readmeText) }
   }
 
   /**
    * Install a plugin package into the current profile (pnpm add + bundle
-   * reconcile). The new bundle is discovered at boot, so a restart is required.
-   * @param spec - package name or git URL to install (the argument to `dsh plugin add`).
+   * reconcile). For a GitHub repo the real npm package name is resolved from
+   * the repo's package.json first (npm install is fast/reliable), with git
+   * fallbacks through a proxy then direct. The new bundle is discovered at
+   * boot, so a restart is required.
+   * @param spec - npm package name or GitHub repo URL to install.
    * @returns `{ needsRestart, name }`.
    */
   @Remote('installPlugin')
   async installPlugin(spec) {
     if (typeof spec !== 'string' || spec === '' || spec.startsWith('-')) {
-      throw new Error('install: invalid package spec')
+      throw new Error('installPlugin: invalid package spec')
     }
     const profileDir = fileURLToPath(this.ctx.baseUrl)
-    const result = spawnSync('pnpm', ['add', spec], {
-      cwd: profileDir,
-      stdio: 'pipe',
-      shell: process.platform === 'win32',
-    })
-    if (result.error !== undefined) {
-      if (result.error.code === 'ENOENT') throw new Error('install: pnpm not found on PATH')
-      throw result.error
+    const repo = githubRepoInfo(spec)
+    const attempts = []
+    if (repo !== null) {
+      const pkg = await this.fetchRepoPackage(repo)
+      if (pkg?.name !== undefined) attempts.push({ spec: pkg.name, label: `npm:${pkg.name}` })
+      attempts.push(
+        { spec: `git+https://ghproxy.net/https://github.com/${repo}.git`, label: `proxy:${repo}` },
+        { spec: `github:${repo}`, label: `git:${repo}` },
+      )
+    } else {
+      attempts.push({ spec, label: spec })
     }
-    if (result.status !== 0) {
-      const detail = String(result.stderr ?? result.stdout ?? '').slice(0, 500)
-      throw new Error(`pnpm add ${spec} failed (${result.status}): ${detail}`)
+    let last
+    for (const attempt of attempts) {
+      const result = runPnpm(profileDir, ['add', attempt.spec])
+      if (result.ok) {
+        reconcileBundles(profileDir)
+        return { needsRestart: true, name: attempt.spec }
+      }
+      last = result.detail
     }
-    reconcileBundles(profileDir)
-    return { needsRestart: true, name: spec }
+    throw new Error(`installPlugin: ${spec} 安装失败 (${last})`)
+  }
+
+  /** Fetch a repo's root package.json (tries main then master), or null. */
+  async fetchRepoPackage(repo) {
+    for (const branch of ['main', 'master']) {
+      try {
+        const res = await fetchWithRetry(`https://raw.githubusercontent.com/${repo}/${branch}/package.json`)
+        if (!res.ok) continue
+        const pkg = JSON.parse(await res.text())
+        if (pkg !== null && typeof pkg === 'object' && typeof pkg.name === 'string') return pkg
+      } catch {
+        // 404 or fetch failure — try the next branch.
+      }
+    }
+    return null
   }
 }
 
