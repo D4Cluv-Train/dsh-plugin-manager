@@ -9,6 +9,7 @@
 - **统一生效**：在弹窗里勾选后，关闭弹窗时一次性应用所有更改。
   - 纯 host 插件即时生效；
   - 含界面组件的插件会弹出提示，刷新页面（或重启 dsh）后生效。
+- **发现插件**：弹窗含"发现"标签页，浏览 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 收录的社区插件（名称、摘要、来源），一键安装（`dsh plugin add`）。
 - 插件管理器自身不可被禁用（弹窗中会标注）。
 
 ## 安装

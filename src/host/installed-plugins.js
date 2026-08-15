@@ -23,7 +23,8 @@
  * `apply(changes)` parameter name must stay a plain identifier.
  */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -33,6 +34,10 @@ export const name = 'installed-plugins'
 
 /** This bundle's package name — the manager must never disable itself. */
 const SELF_PACKAGE = 'dsh-plugin-manager'
+
+/** awesome-dsh-plugin data sources for the discover tab. */
+const AWESOME_README_URL = 'https://raw.githubusercontent.com/awesome-dsh-plugin/awesome-dsh-plugin/main/README.md'
+const AWESOME_NPM_MAP_URL = 'https://raw.githubusercontent.com/awesome-dsh-plugin/awesome-dsh-plugin/main/data/npm-map.json'
 
 /** Cordis FiberState → phase string mirror (see plugin-inventory). */
 const FIBER_PHASE = {
@@ -80,6 +85,76 @@ function collectContributed(patches, ids, modules) {
         collectContributed(entry.config, ids, modules)
       }
     }
+  }
+}
+
+/**
+ * Parse the awesome-dsh-plugin README plugin list into discover entries. Each
+ * `- [owner/repo](url) - summary` row under a `### category` heading becomes
+ * one entry; the install spec is the npm package name from `npm-map.json` when
+ * the plugin ships on npm, else the git repo URL.
+ * @param readme - raw README.md text of the awesome repo.
+ * @param npmMap - parsed `data/npm-map.json` (repo URL → `{ npm }`).
+ * @returns `{ category, name, url, summary, spec }[]`.
+ */
+function parseAwesomePlugins(readme, npmMap) {
+  const plugins = []
+  let category = ''
+  let inPlugins = false
+  for (const line of readme.split(/\r?\n/)) {
+    if (/^##\s+/.test(line)) {
+      inPlugins = line.startsWith('## Plugins')
+      continue
+    }
+    if (!inPlugins) continue
+    const heading = /^###\s+(.+)$/.exec(line)
+    if (heading) {
+      category = heading[1].trim()
+      continue
+    }
+    const entry = /^-\s+\[([^\]]+)\]\(([^)]+)\)(?:\s*-\s*(.*))?$/.exec(line.trim())
+    if (entry === null) continue
+    const name = entry[1].split('#')[0]
+    const summary = (entry[3] ?? '').trim()
+    const repoUrl = `https://github.com/${name}`
+    const spec = npmMap[repoUrl]?.npm ?? repoUrl
+    plugins.push({ category, name, url: entry[2], summary, spec })
+  }
+  return plugins
+}
+
+/** Whether a package directory declares a dsh bundle patch. */
+function isBundleDir(dir) {
+  try {
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    return typeof pkg?.dsh?.bundle?.patch === 'string' && pkg.dsh.bundle.patch !== ''
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Reconcile `dsh.profile.bundles` against the profile's installed dependencies:
+ * a dependency that resolves to a `dsh.bundle`-declaring package joins the
+ * layer stack (mirrors the CLI's reconcilePlugins). Writes only on change.
+ * @param profileDir - profile directory.
+ */
+function reconcileBundles(profileDir) {
+  const manifestPath = join(profileDir, 'package.json')
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  const bundles = manifest.dsh?.profile?.bundles ?? []
+  const dependencies = Object.keys(manifest.dependencies ?? {})
+  let changed = false
+  for (const packageName of dependencies) {
+    if (bundles.includes(packageName)) continue
+    if (isBundleDir(join(profileDir, 'node_modules', packageName))) {
+      bundles.push(packageName)
+      changed = true
+    }
+  }
+  if (changed) {
+    manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } }
+    writeFileSync(manifestPath, JSON.stringify(manifest, undefined, 2) + '\n')
   }
 }
 
@@ -231,6 +306,55 @@ export class InstalledPluginsGateway extends TypertRemoteService {
       }
     }
     return { needsReload: names.length > 0, names }
+  }
+
+  /**
+   * List plugins from the awesome-dsh-plugin registry (name / summary / source
+   * / install spec). Fetched live from GitHub on every call.
+   * @returns `{ plugins }` where each plugin is `{ category, name, url, summary, spec }`.
+   */
+  @Remote('discover')
+  async discover() {
+    const [readmeText, npmMap] = await Promise.all([
+      fetch(AWESOME_README_URL).then((res) => {
+        if (!res.ok) throw new Error(`discover: ${AWESOME_README_URL} returned ${res.status}`)
+        return res.text()
+      }),
+      fetch(AWESOME_NPM_MAP_URL).then((res) => {
+        if (!res.ok) throw new Error(`discover: ${AWESOME_NPM_MAP_URL} returned ${res.status}`)
+        return res.json()
+      }),
+    ])
+    return { plugins: parseAwesomePlugins(readmeText, npmMap) }
+  }
+
+  /**
+   * Install a plugin package into the current profile (pnpm add + bundle
+   * reconcile). The new bundle is discovered at boot, so a restart is required.
+   * @param spec - package name or git URL to install (the argument to `dsh plugin add`).
+   * @returns `{ needsRestart, name }`.
+   */
+  @Remote('install')
+  async install(spec) {
+    if (typeof spec !== 'string' || spec === '' || spec.startsWith('-')) {
+      throw new Error('install: invalid package spec')
+    }
+    const profileDir = fileURLToPath(this.ctx.baseUrl)
+    const result = spawnSync('pnpm', ['add', spec], {
+      cwd: profileDir,
+      stdio: 'pipe',
+      shell: process.platform === 'win32',
+    })
+    if (result.error !== undefined) {
+      if (result.error.code === 'ENOENT') throw new Error('install: pnpm not found on PATH')
+      throw result.error
+    }
+    if (result.status !== 0) {
+      const detail = String(result.stderr ?? result.stdout ?? '').slice(0, 500)
+      throw new Error(`pnpm add ${spec} failed (${result.status}): ${detail}`)
+    }
+    reconcileBundles(profileDir)
+    return { needsRestart: true, name: spec }
   }
 }
 

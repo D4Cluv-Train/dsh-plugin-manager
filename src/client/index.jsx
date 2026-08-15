@@ -98,6 +98,42 @@ const applyResultSchema = {
   },
 }
 
+/** Strict codec for installedPlugins/install parameter: the package spec string. */
+const installSpecSchema = {
+  parse(value) { return String(value) },
+}
+
+/** Strict codec for installedPlugins/discover result: `{ plugins: [...] }`. */
+const discoverResultSchema = {
+  parse(value) {
+    if (value === null || typeof value !== 'object' || !Array.isArray(value.plugins)) {
+      throw new TypeError('installedPlugins/discover result must be { plugins: [...] }')
+    }
+    return {
+      plugins: value.plugins.map(plugin => ({
+        category: plugin?.category ? String(plugin.category) : '',
+        name: String(plugin?.name ?? ''),
+        url: String(plugin?.url ?? ''),
+        summary: plugin?.summary ? String(plugin.summary) : '',
+        spec: String(plugin?.spec ?? ''),
+      })),
+    }
+  },
+}
+
+/** Strict codec for installedPlugins/install result: `{ needsRestart, name }`. */
+const installResultSchema = {
+  parse(value) {
+    if (value === null || typeof value !== 'object') {
+      throw new TypeError('installedPlugins/install result must be an object')
+    }
+    return {
+      needsRestart: Boolean(value.needsRestart),
+      name: String(value.name ?? ''),
+    }
+  },
+}
+
 /**
  * The client-side Typert Remote contribution that materializes the
  * `remote.installedPlugins` namespace. It mirrors the host binding
@@ -140,6 +176,39 @@ const INSTALLED_PLUGINS_REMOTE = {
       typeSymbol: 'dsh-plugin-manager#InstalledPluginsApplyResult',
       schema: applyResultSchema,
     },
+  }, {
+    id: 'dsh-plugin-manager#installedPlugins/discover',
+    service: 'installedPlugins',
+    namespace: 'installedPlugins',
+    method: 'discover',
+    invocation: { kind: 'direct' },
+    parameters: [],
+    result: {
+      mode: 'strict',
+      typeSymbol: 'dsh-plugin-manager#InstalledPluginsDiscoverResult',
+      schema: discoverResultSchema,
+    },
+  }, {
+    id: 'dsh-plugin-manager#installedPlugins/install',
+    service: 'installedPlugins',
+    namespace: 'installedPlugins',
+    method: 'install',
+    invocation: { kind: 'direct' },
+    parameters: [{
+      name: 'spec',
+      wire: 'spec',
+      source: 'json',
+      codec: {
+        mode: 'strict',
+        typeSymbol: 'dsh-plugin-manager#InstalledPluginsInstallSpec',
+        schema: installSpecSchema,
+      },
+    }],
+    result: {
+      mode: 'strict',
+      typeSymbol: 'dsh-plugin-manager#InstalledPluginsInstallResult',
+      schema: installResultSchema,
+    },
   }],
 }
 
@@ -161,6 +230,17 @@ const zh = {
   'restart.title': '需要重启 dsh',
   'restart.message': '以下插件包含界面组件，需重启 dsh（或刷新页面）后生效：',
   'restart.reload': '立即刷新',
+  'tab.installed': '已安装',
+  'tab.discover': '发现',
+  'discover.loading': '正在加载插件列表…',
+  'discover.error': '加载插件列表失败',
+  'discover.empty': '暂无可发现的插件',
+  'discover.retry': '重试',
+  'discover.install': '安装',
+  'discover.installing': '安装中…',
+  'discover.installed': '安装成功',
+  'install.restart': '安装成功，需重启 dsh（或刷新页面）后生效',
+  'install.failed': '安装失败',
 }
 
 /** English dictionary, checked complete against the zh key set. */
@@ -181,6 +261,17 @@ const en = {
   'restart.title': 'Restart required',
   'restart.message': 'These plugins include UI components and need a dsh restart (or page reload) to take effect:',
   'restart.reload': 'Reload now',
+  'tab.installed': 'Installed',
+  'tab.discover': 'Discover',
+  'discover.loading': 'Loading plugin list…',
+  'discover.error': 'Failed to load the plugin list',
+  'discover.empty': 'No discoverable plugins',
+  'discover.retry': 'Retry',
+  'discover.install': 'Install',
+  'discover.installing': 'Installing…',
+  'discover.installed': 'Installed',
+  'install.restart': 'Installed; needs a dsh restart (or page reload) to take effect',
+  'install.failed': 'Install failed',
 }
 
 /**
@@ -194,10 +285,117 @@ const CSS = `
   width: 60vw !important;
   max-width: 960px !important;
   min-width: 420px !important;
+  height: 80vh !important;
 }
-.dsh-pm-modal .dsh-pm-list {
-  max-height: 60vh;
+.dsh-pm-content {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+}
+.dsh-pm-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-inverted);
+}
+.dsh-pm-tab {
+  flex: none;
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.dsh-pm-tab:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.dsh-pm-tab.active {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-pm-discover-item {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.dsh-pm-discover-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dsh-pm-discover-name {
+  flex: none;
+  font-weight: 500;
+}
+.dsh-pm-discover-url {
+  flex: 1;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  text-decoration: none;
+  word-break: break-all;
+}
+.dsh-pm-discover-url:hover {
+  text-decoration: underline;
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-pm-discover-summary {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+.dsh-pm-discover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dsh-pm-discover-command {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+.dsh-pm-install-btn {
+  flex: none;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  background: var(--dsw-alias-accent, #4d6bfe);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 18px;
+}
+.dsh-pm-install-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.dsh-pm-msg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dsh-pm-msg-row button {
+  flex: none;
+  border: none;
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 18px;
 }
 .dsh-pm-action {
   flex: none;
@@ -369,34 +567,60 @@ function ensureStyles() {
 
 /**
  * The sidebar footer action: a "插件" trigger row (icon + label when wide,
- * circle icon on the rail) opening a modal that lists user-installed plugins
- * with a status badge and an enable/disable switch. Toggles are staged locally
- * and applied in ONE `installedPlugins/apply` call when the modal closes; if a
- * changed plugin ships a client half, a second modal prompts a reload.
+ * circle icon on the rail) opening a modal with two tabs — "已安装" lists
+ * user-installed plugins with a status badge and enable/disable switch
+ * (toggles staged locally, applied in ONE `installedPlugins/apply` call when
+ * the modal closes), and "发现" lists plugins from the awesome-dsh-plugin
+ * registry with one-click install.
  * @param props - `{ wide }` owner share from the sidebar shell, the locale
- * seat, and the `listInstalled`/`applyChanges` business faces injected at
- * registration.
+ * seat, and the `listInstalled`/`applyChanges`/`discover`/`install` business
+ * faces injected at registration.
  */
-function PluginManagerAction({ wide, t, listInstalled, applyChanges }) {
+function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, install }) {
   const [open, setOpen] = useState(false)
-  // phase: 'idle' | 'loading' | 'ready' | 'error'
+  // installed tab: phase 'idle' | 'loading' | 'ready' | 'error'
   const [state, setState] = useState({ phase: 'idle' })
   const [pending, setPending] = useState({})
   const [applying, setApplying] = useState(false)
   const [applyError, setApplyError] = useState(null)
   const [restart, setRestart] = useState(null)
+  // tabs
+  const [tab, setTab] = useState('installed')
+  const [discoverState, setDiscoverState] = useState({ phase: 'idle' })
+  const [installingSpec, setInstallingSpec] = useState(null)
+  const [installResult, setInstallResult] = useState(null)
 
   const effectiveEnabled = (entry) =>
     Object.prototype.hasOwnProperty.call(pending, entry.name) ? pending[entry.name] : entry.enabled
 
   const openModal = () => {
     setOpen(true)
+    setTab('installed')
     setState({ phase: 'loading' })
     setPending({})
     setApplyError(null)
+    setInstallResult(null)
     listInstalled()
       .then(entries => { setState({ phase: 'ready', entries }) })
       .catch(error => { setState({ phase: 'error', error: String(error) }) })
+  }
+
+  const openDiscover = () => {
+    setTab('discover')
+    if (discoverState.phase === 'loading' || discoverState.phase === 'ready') return
+    setDiscoverState({ phase: 'loading' })
+    discover()
+      .then(plugins => { setDiscoverState({ phase: 'ready', plugins }) })
+      .catch(error => { setDiscoverState({ phase: 'error', error: String(error) }) })
+  }
+
+  const handleInstall = (spec) => {
+    setInstallingSpec(spec)
+    setInstallResult(null)
+    install(spec)
+      .then(result => setInstallResult({ ok: true, needsRestart: result.needsRestart, name: result.name }))
+      .catch(error => setInstallResult({ ok: false, message: String(error) }))
+      .finally(() => { setInstallingSpec(null) })
   }
 
   const close = () => {
@@ -445,46 +669,98 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges }) {
         title={t('dialog.title')}
         closeLabel={t('close')}
         className="dsh-pm-modal"
+        contentClassName="dsh-pm-content"
       >
-        {state.phase === 'loading' && <p className="dsh-pm-message">{t('dialog.loading')}</p>}
-        {state.phase === 'error' && (
-          <p className="dsh-pm-error">{t('dialog.error')}: {state.error}</p>
-        )}
-        {applyError !== null && (
-          <p className="dsh-pm-error">{t('apply.failed')}: {applyError}</p>
-        )}
-        {state.phase === 'ready' && (state.entries.length === 0 ? (
+        <div className="dsh-pm-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === 'installed'} className={`dsh-pm-tab${tab === 'installed' ? ' active' : ''}`} onClick={() => setTab('installed')}>{t('tab.installed')}</button>
+          <button type="button" role="tab" aria-selected={tab === 'discover'} className={`dsh-pm-tab${tab === 'discover' ? ' active' : ''}`} onClick={openDiscover}>{t('tab.discover')}</button>
+        </div>
+        {tab === 'installed' && (
           <>
-            <p className="dsh-pm-message">{t('dialog.empty')}</p>
-            <p className="dsh-pm-empty-note">dsh plugin --profile web add &lt;package&gt;</p>
+            {state.phase === 'loading' && <p className="dsh-pm-message">{t('dialog.loading')}</p>}
+            {state.phase === 'error' && (
+              <p className="dsh-pm-error">{t('dialog.error')}: {state.error}</p>
+            )}
+            {applyError !== null && (
+              <p className="dsh-pm-error">{t('apply.failed')}: {applyError}</p>
+            )}
+            {state.phase === 'ready' && (state.entries.length === 0 ? (
+              <>
+                <p className="dsh-pm-message">{t('dialog.empty')}</p>
+                <p className="dsh-pm-empty-note">dsh plugin --profile web add &lt;package&gt;</p>
+              </>
+            ) : (
+              <ul className="dsh-pm-list">
+                {state.entries.map(entry => {
+                  const enabled = effectiveEnabled(entry)
+                  const status = statusOf(entry, enabled)
+                  return (
+                    <li key={entry.name} className="dsh-pm-item">
+                      <IconCordisPluginOutline14 size={14} />
+                      <span className="dsh-pm-item-name">{entry.name}</span>
+                      <span className={`dsh-pm-status dsh-pm-status--${status}`}>{t(`status.${status}`)}</span>
+                      {entry.self ? (
+                        <span className="dsh-pm-self-note">{t('self.note')}</span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          className="dsh-pm-switch"
+                          checked={enabled}
+                          aria-label={entry.name}
+                          onChange={event => toggle(entry.name, event.target.checked)}
+                        />
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            ))}
+            {applying && <p className="dsh-pm-message">{t('apply.applying')}</p>}
           </>
-        ) : (
-          <ul className="dsh-pm-list">
-            {state.entries.map(entry => {
-              const enabled = effectiveEnabled(entry)
-              const status = statusOf(entry, enabled)
-              return (
-                <li key={entry.name} className="dsh-pm-item">
-                  <IconCordisPluginOutline14 size={14} />
-                  <span className="dsh-pm-item-name">{entry.name}</span>
-                  <span className={`dsh-pm-status dsh-pm-status--${status}`}>{t(`status.${status}`)}</span>
-                  {entry.self ? (
-                    <span className="dsh-pm-self-note">{t('self.note')}</span>
-                  ) : (
-                    <input
-                      type="checkbox"
-                      className="dsh-pm-switch"
-                      checked={enabled}
-                      aria-label={entry.name}
-                      onChange={event => toggle(entry.name, event.target.checked)}
-                    />
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        ))}
-        {applying && <p className="dsh-pm-message">{t('apply.applying')}</p>}
+        )}
+        {tab === 'discover' && (
+          <>
+            {discoverState.phase === 'loading' && <p className="dsh-pm-message">{t('discover.loading')}</p>}
+            {discoverState.phase === 'error' && (
+              <div className="dsh-pm-msg-row">
+                <p className="dsh-pm-error">{t('discover.error')}: {discoverState.error}</p>
+                <button type="button" onClick={openDiscover}>{t('discover.retry')}</button>
+              </div>
+            )}
+            {discoverState.phase === 'ready' && (discoverState.plugins.length === 0 ? (
+              <p className="dsh-pm-message">{t('discover.empty')}</p>
+            ) : (
+              <ul className="dsh-pm-list">
+                {discoverState.plugins.map(plugin => (
+                  <li key={plugin.url} className="dsh-pm-item dsh-pm-discover-item">
+                    <div className="dsh-pm-discover-head">
+                      <IconCordisPluginOutline14 size={14} />
+                      <span className="dsh-pm-discover-name">{plugin.name}</span>
+                      <a className="dsh-pm-discover-url" href={plugin.url} target="_blank" rel="noreferrer">{plugin.url}</a>
+                    </div>
+                    {plugin.summary !== '' && <p className="dsh-pm-discover-summary">{plugin.summary}</p>}
+                    <div className="dsh-pm-discover-actions">
+                      <span className="dsh-pm-discover-command">dsh plugin --profile web add {plugin.spec}</span>
+                      <button
+                        type="button"
+                        className="dsh-pm-install-btn"
+                        disabled={installingSpec === plugin.spec}
+                        onClick={() => handleInstall(plugin.spec)}
+                      >
+                        {installingSpec === plugin.spec ? t('discover.installing') : t('discover.install')}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ))}
+            {installResult !== null && (installResult.ok ? (
+              <p className="dsh-pm-message">{installResult.needsRestart ? `${t('install.restart')}: ${installResult.name}` : `${t('discover.installed')}: ${installResult.name}`}</p>
+            ) : (
+              <p className="dsh-pm-error">{t('install.failed')}: {installResult.message}</p>
+            ))}
+          </>
+        )}
       </Modal>
       <Modal
         open={restart !== null}
@@ -550,6 +826,20 @@ export async function apply(ctx) {
       const result = await installedPlugins.apply(changes)
       if (!result.ok) {
         throw new Error(`installedPlugins.apply failed: ${result.error.code}: ${result.error.message}`)
+      }
+      return result.value
+    },
+    discover: async () => {
+      const result = await installedPlugins.discover()
+      if (!result.ok) {
+        throw new Error(`installedPlugins.discover failed: ${result.error.code}: ${result.error.message}`)
+      }
+      return result.value.plugins
+    },
+    install: async (spec) => {
+      const result = await installedPlugins.install(spec)
+      if (!result.ok) {
+        throw new Error(`installedPlugins.install failed: ${result.error.code}: ${result.error.message}`)
       }
       return result.value
     },
