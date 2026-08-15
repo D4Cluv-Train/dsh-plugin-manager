@@ -704,7 +704,6 @@ const CSS = `
 }
 .dsh-pm-item--removed {
   opacity: 0.45;
-  pointer-events: none;
 }
 .dsh-pm-item--loading {
   opacity: 0.6;
@@ -902,14 +901,14 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
                             type="checkbox"
                             className="dsh-pm-switch"
                             checked={enabled}
-                            disabled={removed[entry.name]}
+                            disabled={removed[entry.name] || status === 'pendingRestart'}
                             aria-label={entry.name}
                             onChange={event => toggle(entry.name, event.target.checked)}
                           />
                           <button
                             type="button"
                             className="dsh-pm-remove-btn"
-                            disabled={removing || removed[entry.name]}
+                            disabled={removing}
                             onClick={() => handleDeleteClick(entry.name)}
                           >
                             {t('remove')}
