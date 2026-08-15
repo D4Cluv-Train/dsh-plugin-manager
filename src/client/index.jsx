@@ -134,6 +134,16 @@ const installResultSchema = {
   },
 }
 
+/** Strict codec for installedPlugins/restart result: `{ ok }`. */
+const restartResultSchema = {
+  parse(value) {
+    if (value === null || typeof value !== 'object') {
+      throw new TypeError('installedPlugins/restart result must be an object')
+    }
+    return { ok: Boolean(value.ok) }
+  },
+}
+
 /**
  * The client-side Typert Remote contribution that materializes the
  * `remote.installedPlugins` namespace. It mirrors the host binding
@@ -209,6 +219,18 @@ const INSTALLED_PLUGINS_REMOTE = {
       typeSymbol: 'dsh-plugin-manager#InstalledPluginsInstallResult',
       schema: installResultSchema,
     },
+  }, {
+    id: 'dsh-plugin-manager#installedPlugins/restart',
+    service: 'installedPlugins',
+    namespace: 'installedPlugins',
+    method: 'restart',
+    invocation: { kind: 'direct' },
+    parameters: [],
+    result: {
+      mode: 'strict',
+      typeSymbol: 'dsh-plugin-manager#InstalledPluginsRestartResult',
+      schema: restartResultSchema,
+    },
   }],
 }
 
@@ -244,6 +266,11 @@ const zh = {
   'discover.noSummary': '暂无简介',
   'install.restart': '安装成功，需重启 dsh（或刷新页面）后生效',
   'install.failed': '安装失败',
+  'restart.confirmTitle': '重启 dsh',
+  'restart.confirmMessage': '插件已安装，需要重启 dsh 才能生效。是否立即重启？',
+  'restart.now': '立即重启',
+  'restart.later': '稍后',
+  'restart.restarting': '正在重启 dsh…完成后请刷新页面',
 }
 
 /** English dictionary, checked complete against the zh key set. */
@@ -278,6 +305,11 @@ const en = {
   'discover.noSummary': 'No description',
   'install.restart': 'Installed; needs a dsh restart (or page reload) to take effect',
   'install.failed': 'Install failed',
+  'restart.confirmTitle': 'Restart dsh',
+  'restart.confirmMessage': 'The plugin is installed and needs a dsh restart to take effect. Restart now?',
+  'restart.now': 'Restart now',
+  'restart.later': 'Later',
+  'restart.restarting': 'Restarting dsh… please refresh after it comes back',
 }
 
 /**
@@ -648,10 +680,10 @@ function ensureStyles() {
  * the modal closes), and "发现" lists plugins from the awesome-dsh-plugin
  * registry with one-click install.
  * @param props - `{ wide }` owner share from the sidebar shell, the locale
- * seat, and the `listInstalled`/`applyChanges`/`discover`/`installPlugin`
- * business faces injected at registration.
+ * seat, and the `listInstalled`/`applyChanges`/`discover`/`installPlugin`/
+ * `restart` business faces injected at registration.
  */
-function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, installPlugin }) {
+function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, installPlugin, restart: restartService }) {
   const [open, setOpen] = useState(false)
   // installed tab: phase 'idle' | 'loading' | 'ready' | 'error'
   const [state, setState] = useState({ phase: 'idle' })
@@ -665,6 +697,8 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
   const [installingSpec, setInstallingSpec] = useState(null)
   const [installResult, setInstallResult] = useState(null)
   const [selectedPlugin, setSelectedPlugin] = useState(null)
+  const [confirmRestart, setConfirmRestart] = useState(null)
+  const [restarting, setRestarting] = useState(false)
 
   const effectiveEnabled = (entry) =>
     Object.prototype.hasOwnProperty.call(pending, entry.name) ? pending[entry.name] : entry.enabled
@@ -694,9 +728,20 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
     setInstallingSpec(spec)
     setInstallResult(null)
     installPlugin(spec)
-      .then(result => setInstallResult({ ok: true, needsRestart: result.needsRestart, name: result.name }))
+      .then(result => {
+        setInstallResult({ ok: true, name: result.name })
+        setConfirmRestart({ name: result.name })
+      })
       .catch(error => setInstallResult({ ok: false, message: String(error) }))
       .finally(() => { setInstallingSpec(null) })
+  }
+
+  const handleRestartService = () => {
+    setConfirmRestart(null)
+    setRestarting(true)
+    restartService()
+      .catch(error => setInstallResult({ ok: false, message: String(error) }))
+      .finally(() => { setRestarting(false) })
   }
 
   const close = () => {
@@ -854,11 +899,9 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
                     {installingSpec === selectedPlugin.spec ? t('discover.installing') : t('discover.install')}
                   </button>
                 </div>
-                {installResult !== null && (installResult.ok ? (
-                  <p className="dsh-pm-message">{installResult.needsRestart ? `${t('install.restart')}: ${installResult.name}` : `${t('discover.installed')}: ${installResult.name}`}</p>
-                ) : (
+                {installResult !== null && !installResult.ok && (
                   <p className="dsh-pm-error">{t('install.failed')}: {installResult.message}</p>
-                ))}
+                )}
               </div>
             ))}
           </>
@@ -885,6 +928,24 @@ function PluginManagerAction({ wide, t, listInstalled, applyChanges, discover, i
             {t('restart.reload')}
           </button>
         </div>
+      </Modal>
+      <Modal
+        open={confirmRestart !== null || restarting}
+        onClose={() => { if (!restarting) setConfirmRestart(null) }}
+        title={t('restart.confirmTitle')}
+        closeLabel={t('close')}
+      >
+        {restarting ? (
+          <p className="dsh-pm-message">{t('restart.restarting')}</p>
+        ) : (
+          <>
+            <p className="dsh-pm-message">{t('restart.confirmMessage')}: {confirmRestart?.name}</p>
+            <div className="dsh-pm-restart-actions">
+              <button type="button" className="dsh-pm-reload" onClick={handleRestartService}>{t('restart.now')}</button>
+              <button type="button" className="dsh-pm-back" onClick={() => setConfirmRestart(null)}>{t('restart.later')}</button>
+            </div>
+          </>
+        )}
       </Modal>
     </>
   )
@@ -942,6 +1003,13 @@ export async function apply(ctx) {
       const result = await installedPlugins.installPlugin(spec)
       if (!result.ok) {
         throw new Error(`installedPlugins.installPlugin failed: ${result.error.code}: ${result.error.message}`)
+      }
+      return result.value
+    },
+    restart: async () => {
+      const result = await installedPlugins.restart()
+      if (!result.ok) {
+        throw new Error(`installedPlugins.restart failed: ${result.error.code}: ${result.error.message}`)
       }
       return result.value
     },

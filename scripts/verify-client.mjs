@@ -106,6 +106,10 @@ const ctx = {
           remoteCalls.push(`installedPlugins.installPlugin:${spec}`)
           return { ok: true, value: { needsRestart: true, name: spec } }
         },
+        restart: async () => {
+          remoteCalls.push('installedPlugins.restart')
+          return { ok: true, value: { ok: true } }
+        },
       }
     }
     return undefined
@@ -156,6 +160,12 @@ if (installParam?.name !== 'spec' || installParam?.wire !== 'spec' || installPar
   throw new Error('installedPlugins/installPlugin must declare a strict `spec` parameter codec')
 }
 
+const restartDescriptor = mounted.flatMap(c => c.descriptors ?? []).find(d => d.namespace === 'installedPlugins' && d.method === 'restart')
+if (restartDescriptor === undefined) throw new Error('installedPlugins/restart contribution was not mounted via ctx.remote.$mount')
+if (restartDescriptor.result?.mode !== 'strict' || typeof restartDescriptor.result?.schema?.parse !== 'function') {
+  throw new Error('installedPlugins/restart result codec is not strict with a parse() schema')
+}
+
 const registerCall = registered.find(r => r.options.name === 'sidebar.footer.action')
 if (registerCall === undefined) throw new Error('no sidebar.footer.action registration')
 if (registerCall.options.id !== 'plugin-manager') throw new Error(`unexpected action id: ${registerCall.options.id}`)
@@ -177,6 +187,9 @@ if (!Array.isArray(discovered) || discovered[0]?.spec !== 'owner-repo') throw ne
 if (typeof injected.installPlugin !== 'function') throw new Error('installPlugin not injected')
 await injected.installPlugin('owner-repo')
 if (!remoteCalls.includes('installedPlugins.installPlugin:owner-repo')) throw new Error('installPlugin did not call the mounted installedPlugins/installPlugin service')
+if (typeof injected.restart !== 'function') throw new Error('restart not injected')
+await injected.restart()
+if (!remoteCalls.includes('installedPlugins.restart')) throw new Error('restart did not call the mounted installedPlugins/restart service')
 
 console.log('verify-client: PASS')
 console.log(`  externals required: ${[...seen].join(', ')}`)
@@ -185,6 +198,7 @@ console.log(`  mount: ${mountedDescriptor.namespace}/${mountedDescriptor.method}
 console.log(`  mount: ${applyDescriptor.namespace}/${applyDescriptor.method} (${applyDescriptor.result.mode}, param ${changesParam.wire})`)
 console.log(`  mount: ${discoverDescriptor.namespace}/${discoverDescriptor.method} (${discoverDescriptor.result.mode})`)
 console.log(`  mount: ${installDescriptor.namespace}/${installDescriptor.method} (${installDescriptor.result.mode}, param ${installParam.wire})`)
+console.log(`  mount: ${restartDescriptor.namespace}/${restartDescriptor.method} (${restartDescriptor.result.mode})`)
 console.log(`  registration: ${registerCall.options.name} id=${registerCall.options.id} order=${registerCall.options.order}`)
 console.log(`  remote: ${remoteCalls.join(', ')}`)
 process.exit(0)
