@@ -1,6 +1,6 @@
 {
   "name": "@d4cluvtrain/dsh-plugin-manager",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "MVP dsh bundle plugin: proves it loaded by registering a /plugin-manager web route, logging, writing a marker file, and adding a sidebar '插件' button whose modal lists the user-installed plugins",
   "type": "module",
   "publishConfig": {
